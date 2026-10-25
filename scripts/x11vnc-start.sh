@@ -8,7 +8,39 @@ SETTINGS_FILE="$CONFIG_DIR/settings.yaml"
 
 echo "[x11vnc-start] Initializing VNC remote assistance service on DISPLAY :0..."
 
-# 1. Wait for Xorg server on :0 to be ready and accepting connections
+# 1. Check if VNC is enabled in settings.yaml
+VNC_ENABLED="true"
+VNC_PORT="5900"
+BIND_TS="true"
+
+if [ -f "$SETTINGS_FILE" ]; then
+    VALS=$(python3 -c '
+import yaml
+try:
+    with open("'"$SETTINGS_FILE"'", "r") as f:
+        d = yaml.safe_load(f) or {}
+        vnc = d.get("vnc", {})
+        print(f"{vnc.get(\"enabled\", True)}|{vnc.get(\"port\", 5900)}|{vnc.get(\"bind_tailscale_only\", True)}")
+except Exception:
+    print("true|5900|true")
+' 2>/dev/null || echo "true|5900|true")
+    IFS='|' read -r VNC_ENABLED VNC_PORT BIND_TS <<< "$VALS"
+fi
+
+if [ "$VNC_ENABLED" = "False" ] || [ "$VNC_ENABLED" = "false" ]; then
+    echo "[x11vnc-start] VNC service is disabled in settings.yaml. Exiting cleanly."
+    exit 0
+fi
+
+# 2. Ensure VNC password file exists (never run unauthenticated or create default password)
+if [ ! -f "$PASS_FILE" ]; then
+    echo "[x11vnc-start] ERROR: Password file '$PASS_FILE' missing." >&2
+    echo "[x11vnc-start] An explicit password must be set before starting VNC. Refusing unauthenticated listener." >&2
+    exit 1
+fi
+chmod 600 "$PASS_FILE" 2>/dev/null || true
+
+# 3. Wait for Xorg server on :0 to be ready and accepting connections
 X_READY=0
 for i in $(seq 1 30); do
     if [ -e "/tmp/.X11-unix/X0" ] || xset -q -display :0 >/dev/null 2>&1; then
@@ -23,31 +55,17 @@ if [ "$X_READY" -eq 0 ]; then
     echo "[x11vnc-start] Warning: DISPLAY :0 probe timed out, attempting start anyway..."
 fi
 
-# 2. Ensure VNC password file exists (default password: thinclient)
-mkdir -p "$CONFIG_DIR"
-if [ ! -f "$PASS_FILE" ]; then
-    echo "[x11vnc-start] No password file found. Creating default VNC password ('thinclient')..."
-    if command -v x11vnc >/dev/null 2>&1; then
-        x11vnc -storepasswd "thinclient" "$PASS_FILE" 2>/dev/null || true
-        chmod 600 "$PASS_FILE" 2>/dev/null || true
-    fi
-fi
-
-# 3. Base performance arguments for Raspberry Pi 3:
-# -forever: keep listening across disconnects
-# -shared: allows reconnection without killing current session
-# -repeat: smooth keyboard repeat handling
-# -noxdamage: avoids driver conflicts with Glamor / VC4 2D acceleration
-# -wait 50 -defer 40: throttles polling & batches frame updates to keep CPU <10%
+# 4. Base performance arguments for Raspberry Pi 3
 ARGS=(
     -display :0
     -forever
     -shared
-    -rfbport 5900
+    -rfbport "${VNC_PORT:-5900}"
     -repeat
     -noxdamage
     -wait 50
     -defer 40
+    -rfbauth "$PASS_FILE"
 )
 
 # Detect Xauthority file if present (root kiosk without display manager runs directly on :0)
@@ -57,23 +75,11 @@ elif [ -n "$XAUTHORITY" ] && [ -f "$XAUTHORITY" ]; then
     ARGS+=(-auth "$XAUTHORITY")
 fi
 
-if [ -f "$PASS_FILE" ]; then
-    ARGS+=(-rfbauth "$PASS_FILE")
-fi
-
-# 4. Check Tailscale-only binding preference
-BIND_TS="true"
-if [ -f "$SETTINGS_FILE" ]; then
-    VAL=$(grep -E '^\s*bind_tailscale_only:\s*' "$SETTINGS_FILE" 2>/dev/null | awk '{print $2}' | tr -d ' "\r\n')
-    if [ -n "$VAL" ]; then
-        BIND_TS="$VAL"
-    fi
-fi
-
+# 5. Tailscale binding logic: strict enforcement
 if [ "$BIND_TS" = "true" ] || [ "$BIND_TS" = "True" ]; then
     echo "[x11vnc-start] Tailscale-only mode enabled. Resolving Tailscale IPv4..."
     TS_IP=""
-    for i in $(seq 1 15); do
+    for i in $(seq 1 10); do
         if command -v tailscale >/dev/null 2>&1; then
             TS_IP=$(tailscale ip -4 2>/dev/null || true)
             if [ -n "$TS_IP" ]; then
@@ -86,14 +92,13 @@ if [ "$BIND_TS" = "true" ] || [ "$BIND_TS" = "True" ]; then
     if [ -n "$TS_IP" ]; then
         echo "[x11vnc-start] Binding strictly to Tailscale IP: $TS_IP"
         ARGS+=(-listen "$TS_IP")
-    elif ip link show tailscale0 >/dev/null 2>&1; then
-        echo "[x11vnc-start] Tailscale IP not yet available, falling back to interface tailscale0"
-        ARGS+=(-interface tailscale0)
     else
-        echo "[x11vnc-start] Warning: Tailscale not available or interface missing. Binding to 0.0.0.0 fallback."
+        echo "[x11vnc-start] ERROR: Tailscale VPN unavailable and bind_tailscale_only is true." >&2
+        echo "[x11vnc-start] Refusing to bind to 0.0.0.0 or LAN to preserve security. Exiting." >&2
+        exit 1
     fi
 else
-    echo "[x11vnc-start] Binding to all network interfaces (0.0.0.0:5900)"
+    echo "[x11vnc-start] Binding to all network interfaces (0.0.0.0:${VNC_PORT:-5900})"
 fi
 
 echo "[x11vnc-start] Executing x11vnc with parameters: ${ARGS[*]}"

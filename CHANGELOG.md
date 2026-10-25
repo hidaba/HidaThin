@@ -5,6 +5,74 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.17] - 2026-10-25
+
+### Sicurezza (SEC-01 & SEC-02)
+- **Bind Locale e Protezione Accesso Remoto (`app/main.py`, `config/settings.yaml`)**:
+  - Impostato il bind default del backend Flask a `127.0.0.1:8080`.
+  - Introdotti controlli di accesso (`web_admin.remote_enabled`, `web_admin.admin_token`) che rifiutano chiamate remote mutanti prive di autorizzazione (403/401) e verificano l'header `Host` contro attacchi di DNS rebinding.
+  - Kiosk locale ed overlay OSD continuano a operare senza frizioni su loopback.
+- **Rimozione Credenziali dai Flussi Frontend & API (`templates/index.html`, `templates/hosts.html`, `app/main.py`)**:
+  - Eliminate le password in chiaro da tutti i file HTML, attributi DOM (`data-password`) e risposte JSON delle API.
+  - Esposto unicamente il flag booleano `has_password`.
+  - Definita la semantica rigorosa delle password: campo vuoto significa "nessuna sostituzione" (conserva la password esistente nel backend); la cancellazione richiede azione esplicita (`clear_password`); supporto a password transitorie per singola sessione (`save_password=False`).
+  - Permessi restrittivi `0600` e directory `0700` per i file di configurazione (`hosts.yaml`, `settings.yaml`, `x11vnc.pass`).
+- **VNC Strettamente Vincolato a Tailscale (`scripts/x11vnc-start.sh`, `app/vnc.py`)**:
+  - Con `bind_tailscale_only: true`, eliminato il fallback insicuro a `0.0.0.0` o LAN: se la VPN Tailscale non è pronta, il launcher termina con codice di errore lasciando che systemd ritenti.
+  - Eliminata la password comune hardcoded `thinclient` dalle nuove installazioni: richiesta configurazione esplicita della password prima di consentire l'ascolto VNC.
+
+### Affidabilità Filesystem e Installer (FS-01, FS-02, INS-01)
+- **Logging Runtime Volatile e Root Read-Only (`app/rdp.py`, `systemd/thinclient.service`)**:
+  - Spostati i log di runtime in directory volatile (`/run/thinclient`, configurata con `RuntimeDirectory=thinclient` in systemd).
+  - Gestione resiliente degli errori: fallback controllato su `/dev/null` in caso di file system protetto o esaurimento inode, evitando il blocco delle sessioni RDP.
+- **Persistenza `/data`, Migrazione e Rollback Idempotente (`scripts/setup-readonly-fs.sh`)**:
+  - Rilevamento automatico dell'UUID effettivo della partizione senza assumere label fisse (`HidaData`).
+  - Verifica di sicurezza per impedire la selezione accidentale delle partizioni root (`/`) o boot.
+  - Eliminata la formattazione implicita di partizioni ext4 già contenenti dati.
+  - Blocco preventivo dell'attivazione RO se il mount di `/data` fallisce o non è scrivibile.
+  - Rollback (`--undo`) coerente che preserva le configurazioni più recenti create su `/data` prima del ripristino di `/etc/fstab`.
+- **Installer Pulito e Conservativo (`install.sh`)**:
+  - Clonazione sicura tramite directory di staging per evitare collisioni in destinazioni non vuote.
+  - Rimosso l'`EOF` orfano al termine dello script.
+  - Separazione netta tra codice e configurazione utente (nessuna sovrascrittura di file esistenti).
+  - Supporto trasparente a entrambi i pacchetti browser `chromium` e `chromium-browser`.
+
+### Performance di Avvio e Gestione Stato (BOOT-01, BOOT-02)
+- **Splash Cyberpunk Istantaneo e Non Bloccante (`templates/index.html`)**:
+  - Eliminati tutti i delay artificiali (`setTimeout` annidati): se la rete e la VPN sono già attive, la schermata di splash transiziona in <= 200ms.
+  - Comandi di recupero ("Configura Wi-Fi", "Apri Dashboard") immediatamente visibili e utilizzabili anche in assenza di rete.
+  - Polling a richiesta singola con `AbortController` e cancellazione immediata alla chiusura dello splash.
+- **Endpoint Locale `/healthz` e Cache di Stato in Background (`app/main.py`)**:
+  - Introdotto endpoint `/healthz` ad altissima velocità (nessun subprocess, nessuna chiamata a rete/DNS).
+  - Raccolta dello stato del sistema in background con cache thread-safe e TTL a tempo monotonico (`time.monotonic()`), evitando spawn multipli di subprocess su richieste concorrenti.
+  - Timeout restrittivi e fallback da hostname a indirizzo IP diretto per la verifica di raggiungibilità dei PC RDP.
+  - Rimosso il mascheramento indiscriminato di `logrotate.timer` da `scripts/optimize-boot.sh`.
+
+### Ciclo di Vita Sessioni, Rete e Aggiornamenti (RDP-01, NET-01, WIFI-01, UPD-01)
+- **Isolamento Sessioni FreeRDP e Coordinamento Kiosk (`app/rdp.py`)**:
+  - Creata la classe `RDPSession` con identificatore univoco `session_id`. Il thread di monitoraggio sorveglia esclusivamente la propria istanza e non altera sessioni successive.
+  - Sostituito `os.setsid` con `start_new_session=True`.
+  - Segnalazione `SIGSTOP`/`SIGCONT` mirata esclusivamente ai processi del browser kiosk (`chromium.*--kiosk`), senza impattare altri processi utente.
+- **Invalidazione Cache Tailscale e Parsing Wi-Fi Robusto (`app/tailscale.py`, `app/wifi.py`, `templates/wifi.html`)**:
+  - Invalidazione immediata della cache Tailscale in caso di riavvio del daemon.
+  - Parser rigoroso per l'output terse di `nmcli` in grado di gestire `\:`, `\\`, apostrofi, virgolette e caratteri UTF-8.
+  - Costruzione dei pulsanti Wi-Fi tramite API DOM (`addEventListener`), azzerando vulnerabilità di iniezione JavaScript nei nomi delle reti.
+  - Procedura di connessione Wi-Fi non distruttiva che preserva il profilo funzionante precedente in caso di credenziali errate.
+- **Aggiornamento OS Debian Atomico e Preservazione Mount (`app/system.py`)**:
+  - Impostazione dello stato `running` sotto lock prima della creazione del worker thread, prevenendo update concorrenti.
+  - Memorizzazione dello stato di mount iniziale (RO vs RW) e ripristino fedele dello stato di partenza (nessuna imposizione di RO su sistemi originariamente RW).
+  - Segnalazione dello stato `completed_ro_failed` se i pacchetti APT sono aggiornati ma il remount RO non va a buon fine.
+
+### Modalità Direct-to-RDP (BOOT-03)
+- **Avvio Diretto a RDP Configurabile (`scripts/direct_rdp_coordinator.py`, `scripts/xinitrc`, `config/settings.yaml`)**:
+  - Introdotta la modalità `startup.mode: direct_rdp` (disattivata per default).
+  - Coordinatore dedicato che attende la connettività di rete e avvia la sessione verso l'host predefinito lasciando inizialmente spento Chromium.
+  - Fallback automatico e trasparente alla Dashboard Kiosk in caso di timeout, errore o disconnessione della sessione RDP, senza cicli infiniti tra browser e FreeRDP.
+
+### Suite di Test Integrata (TEST-01)
+- **25 Test di Regressione Automatizzati (`tests/`)**:
+  - Coperti tutti gli scenari richiesti: T01-T05 (Sicurezza), T06-T10 (Filesystem & Installer), T11-T15 (Boot & Healthz), T16-T17-T24 (RDP Lifecycle & Coordinator), T18-T20 (Rete & Wi-Fi), T21-T23-T25 (Updater & Settings Schema).
+
 ## [0.2.16] - 2026-10-25
 
 ### Risolto e Perfezionato (Boot Read-Only & Appliance Mode)

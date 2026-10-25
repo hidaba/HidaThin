@@ -26,27 +26,96 @@ DEFAULT_SETTINGS = {
         "enabled": True,
         "port": 5900,
         "bind_tailscale_only": True
+    },
+    "web_admin": {
+        "bind": "127.0.0.1",
+        "port": 8080,
+        "remote_enabled": False,
+        "admin_token": ""
+    },
+    "startup": {
+        "mode": "dashboard",              # dashboard | direct_rdp
+        "connect_timeout_seconds": 20,
+        "max_initial_attempts": 1,
+        "fallback_to_dashboard": True
     }
 }
 
+VALID_PROFILES = {"performance", "balanced", "quality"}
+VALID_COLOR_DEPTHS = {16, 24, 32}
+VALID_STARTUP_MODES = {"dashboard", "direct_rdp"}
+
+def _deep_merge_dict(base, override):
+    """Recursively merges override into a copy of base."""
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = _deep_merge_dict(merged[k], v)
+        else:
+            merged[k] = v
+    return merged
+
+def validate_settings(settings):
+    """Validates settings against the expected schema."""
+    if not isinstance(settings, dict):
+        return False, "La configurazione deve essere un oggetto."
+
+    if "profile" in settings and settings["profile"] not in VALID_PROFILES:
+        return False, f"Profilo non valido: {settings['profile']}. Valori ammessi: {', '.join(VALID_PROFILES)}"
+
+    if "color_depth" in settings:
+        try:
+            cd = int(settings["color_depth"])
+            if cd not in VALID_COLOR_DEPTHS:
+                return False, f"Profondità colore non valida: {cd}. Valori ammessi: {', '.join(map(str, VALID_COLOR_DEPTHS))}"
+        except (ValueError, TypeError):
+            return False, "Profondità colore non valida."
+
+    if "vnc" in settings and isinstance(settings["vnc"], dict):
+        vnc = settings["vnc"]
+        if "port" in vnc:
+            try:
+                port = int(vnc["port"])
+                if not (1 <= port <= 65535):
+                    return False, f"Porta VNC non valida: {port} (deve essere compresa tra 1 e 65535)."
+            except (ValueError, TypeError):
+                return False, "Porta VNC non valida."
+
+    if "web_admin" in settings and isinstance(settings["web_admin"], dict):
+        wa = settings["web_admin"]
+        if "port" in wa:
+            try:
+                port = int(wa["port"])
+                if not (1 <= port <= 65535):
+                    return False, f"Porta web admin non valida: {port}."
+            except (ValueError, TypeError):
+                return False, "Porta web admin non valida."
+
+    if "startup" in settings and isinstance(settings["startup"], dict):
+        st = settings["startup"]
+        if "mode" in st and st["mode"] not in VALID_STARTUP_MODES:
+            return False, f"Modalità avvio non valida: {st['mode']}. Valori ammessi: {', '.join(VALID_STARTUP_MODES)}"
+        if "connect_timeout_seconds" in st:
+            try:
+                ct = int(st["connect_timeout_seconds"])
+                if ct < 1 or ct > 300:
+                    return False, "connect_timeout_seconds deve essere compreso tra 1 e 300."
+            except (ValueError, TypeError):
+                return False, "connect_timeout_seconds deve essere numerico."
+
+    return True, ""
+
 def get_settings():
-    """Loads settings or returns defaults."""
+    """Loads settings merged with defaults."""
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r") as f:
                 data = yaml.safe_load(f)
                 if isinstance(data, dict):
-                    settings = DEFAULT_SETTINGS.copy()
-                    settings["vnc"] = DEFAULT_SETTINGS["vnc"].copy()
-                    for k, v in data.items():
-                        if k == "vnc" and isinstance(v, dict):
-                            settings["vnc"].update(v)
-                        else:
-                            settings[k] = v
-                    return settings
+                    return _deep_merge_dict(DEFAULT_SETTINGS, data)
         except Exception as e:
             logger.error(f"Error loading settings: {e}")
-    return DEFAULT_SETTINGS.copy()
+    return _deep_merge_dict(DEFAULT_SETTINGS, {})
 
 def is_ro_filesystem(path="/"):
     """Checks if a given mount path is currently mounted read-only."""
@@ -106,12 +175,42 @@ def remount_fs(ro=True):
         logger.error(f"Failed to remount filesystem as {mode}: {e}")
         return False, str(e)
 
-def save_settings(settings):
-    """Saves settings to config file, handling auto-remount if root is read-only."""
+def write_secure_yaml(filepath, data):
+    """Writes data to a YAML file with 0600 permissions atomically."""
+    dir_path = os.path.dirname(filepath)
+    os.makedirs(dir_path, exist_ok=True)
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(SETTINGS_FILE, "w") as f:
-            yaml.safe_dump(settings, f, default_flow_style=False)
+        os.chmod(dir_path, 0o700)
+    except Exception:
+        pass
+
+    tmp_path = f"{filepath}.tmp.{os.getpid()}"
+    with open(tmp_path, "w") as f:
+        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+    try:
+        os.chmod(tmp_path, 0o600)
+    except Exception:
+        pass
+    os.replace(tmp_path, filepath)
+
+def save_settings(settings):
+    """
+    Saves settings by performing a controlled merge with existing settings,
+    validating the schema, applying 0600 permissions, and handling auto-remount if read-only.
+    """
+    valid, err_msg = validate_settings(settings)
+    if not valid:
+        return False, err_msg
+
+    current = get_settings()
+    merged = _deep_merge_dict(current, settings)
+
+    valid, err_msg = validate_settings(merged)
+    if not valid:
+        return False, err_msg
+
+    try:
+        write_secure_yaml(SETTINGS_FILE, merged)
         return True, "Impostazioni salvate"
     except OSError as e:
         # Check if read-only filesystem error (errno 30)
@@ -119,9 +218,7 @@ def save_settings(settings):
             logger.warning("Filesystem is Read-Only. Performing temporary remount RW to save settings...")
             remount_fs(ro=False)
             try:
-                os.makedirs(CONFIG_DIR, exist_ok=True)
-                with open(SETTINGS_FILE, "w") as f:
-                    yaml.safe_dump(settings, f, default_flow_style=False)
+                write_secure_yaml(SETTINGS_FILE, merged)
                 return True, "Impostazioni salvate con successo"
             finally:
                 remount_fs(ro=True)
@@ -299,43 +396,46 @@ def _run_cmd_logged(cmd, env=None):
     process.stdout.close()
     return process.wait()
 
-def _os_update_worker():
-    """Background worker for OS update sequence with guaranteed RO restore."""
+def _os_update_worker(initial_root_ro=None, initial_boot_ro=None):
+    """Background worker for OS update sequence with state-preserving mount restore."""
     start_time = time.time()
     def log(msg):
         with _update_lock:
             _update_state["logs"].append(f">>> {msg}")
         logger.info(f"[OS-UPDATE] {msg}")
 
-    with _update_lock:
-        _update_state["status"] = "running"
-        _update_state["started_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        _update_state["completed_at"] = None
-        _update_state["error_message"] = None
-        _update_state["reboot_recommended"] = False
-        _update_state["logs"].clear()
+    boot_path = "/boot/firmware" if os.path.exists("/boot/firmware") else "/boot"
+    root_was_ro = is_ro_filesystem("/") if initial_root_ro is None else initial_root_ro
+    boot_was_ro = (is_ro_filesystem(boot_path) if os.path.exists(boot_path) else False) if initial_boot_ro is None else initial_boot_ro
 
+    apt_success = False
     try:
-        # Step 1: Remount filesystem to RW
+        # Step 1: Remount filesystem to RW if it was RO
         with _update_lock:
             _update_state["step"] = "1/5: Sblocco filesystem in modalità Scrittura (RW)..."
             _update_state["progress"] = 10
-        log("Sblocco scheda SD: rimontaggio partizioni in Read-Write (RW)...")
-        ok, msg = remount_fs(ro=False)
-        if not ok:
-            log(f"Avviso rimontaggio RW: {msg} (si tenta comunque l'aggiornamento)")
+        if root_was_ro or boot_was_ro:
+            log("Sblocco scheda SD: rimontaggio partizioni in Read-Write (RW)...")
+            ok, msg = remount_fs(ro=False)
+            if not ok:
+                raise RuntimeError(f"Impossibile sbloccare il filesystem in scrittura: {msg}")
+            # Verify root is indeed RW on Linux
+            if sys.platform == "linux" and is_ro_filesystem("/"):
+                raise RuntimeError("Verifica fallita: la partizione root è rimasta in sola lettura.")
+            log("Filesystem rimontato in RW con successo.")
         else:
-            log("Filesystem rimontato in RW. Procedura di scrittura abilitata.")
+            log("Filesystem già in modalità Scrittura (RW).")
 
         if sys.platform != "linux":
             # Simulation for development/testing platforms
             log("[SIMULAZIONE NON-LINUX] Simulazione apt update & dist-upgrade...")
             for i in range(1, 5):
-                time.sleep(1)
-                log(f"[SIMULAZIONE] Download pacchetti fittizi ({i*25}%)...")
+                time.sleep(0.5)
+                log(f"[SIMULAZIONE] Download pacchetti ({i*25}%)...")
             with _update_lock:
                 _update_state["progress"] = 90
                 _update_state["reboot_recommended"] = True
+            apt_success = True
         else:
             # Debian environment flags
             env = os.environ.copy()
@@ -383,9 +483,8 @@ def _os_update_worker():
             with _update_lock:
                 _update_state["reboot_recommended"] = True
             log("Aggiornamento Debian completato con successo!")
+            apt_success = True
 
-        with _update_lock:
-            _update_state["status"] = "completed"
     except Exception as e:
         logger.error(f"Error during OS update: {e}", exc_info=True)
         with _update_lock:
@@ -393,27 +492,58 @@ def _os_update_worker():
             _update_state["error_message"] = str(e)
         log(f"ERRORE CRITICO: {e}")
     finally:
-        # Crucial: Always restore RO filesystem even if error occurred!
-        log("Protezione finale scheda SD: rimontaggio in Sola Lettura (RO)...")
+        # Step 6: Restore initial mount state
         subprocess.run(["sync"], check=False)
-        ro_ok, ro_msg = remount_fs(ro=True)
-        if ro_ok:
-            log("Filesystem ripristinato in SOLA LETTURA (RO). Protezione attiva.")
+        remount_error = None
+        if root_was_ro:
+            log("Ripristino stato iniziale: rimontaggio in Sola Lettura (RO)...")
+            ro_ok, ro_msg = remount_fs(ro=True)
+            if ro_ok:
+                log("Filesystem ripristinato in SOLA LETTURA (RO). Protezione attiva.")
+            else:
+                remount_error = f"Ripristino RO fallito: {ro_msg}"
+                log(f"ATTENZIONE: {remount_error}")
         else:
-            log(f"Attenzione ripristino RO: {ro_msg}")
+            log("Filesystem era originariamente in RW: mantenuto in Read-Write.")
 
         elapsed = round(time.time() - start_time, 1)
         with _update_lock:
             _update_state["progress"] = 100
             _update_state["completed_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            if apt_success:
+                if remount_error:
+                    _update_state["status"] = "completed_ro_failed"
+                    _update_state["error_message"] = remount_error
+                else:
+                    _update_state["status"] = "completed"
         log(f"Operazione terminata in {elapsed} secondi.")
 
 def start_os_update():
     """Starts the OS update in a separate background thread if not already running."""
+    boot_path = "/boot/firmware" if os.path.exists("/boot/firmware") else "/boot"
     with _update_lock:
         if _update_state["status"] == "running":
             return False, "Un aggiornamento di sistema è già in corso."
 
-    t = threading.Thread(target=_os_update_worker, daemon=True)
-    t.start()
-    return True, "Aggiornamento sistema operativo avviato in background."
+        # Atomically set status to running inside lock before creating thread
+        _update_state["status"] = "running"
+        _update_state["started_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        _update_state["completed_at"] = None
+        _update_state["error_message"] = None
+        _update_state["reboot_recommended"] = False
+        _update_state["logs"].clear()
+        _update_state["progress"] = 5
+        _update_state["step"] = "Avvio sequenza di aggiornamento..."
+
+        root_was_ro = is_ro_filesystem("/")
+        boot_was_ro = is_ro_filesystem(boot_path) if os.path.exists(boot_path) else False
+
+    try:
+        t = threading.Thread(target=_os_update_worker, args=(root_was_ro, boot_was_ro), daemon=True)
+        t.start()
+        return True, "Aggiornamento sistema operativo avviato in background."
+    except Exception as e:
+        with _update_lock:
+            _update_state["status"] = "idle"
+            _update_state["error_message"] = f"Impossibile avviare thread di aggiornamento: {e}"
+        return False, str(e)

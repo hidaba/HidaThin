@@ -23,9 +23,6 @@ SERVICES_TO_PRUNE=(
     "apt-daily-upgrade.service"
     "man-db.timer"
     "man-db.service"
-    "e2scrub_all.timer"
-    "e2scrub_reap.service"
-    "logrotate.timer"
 
     # Printing subsystem (RDP redirection handles printing or not needed on thinclient)
     "cups.service"

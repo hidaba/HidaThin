@@ -217,7 +217,7 @@ sudo bash /opt/thinclient/scripts/optimize-boot.sh
 
 ### 5. Configuration & Passwords
 
-Edit `/opt/thinclient/config/hosts.yaml` to specify your target Windows machines:
+Edit `/opt/thinclient/config/hosts.yaml` to specify your target Windows machines (passwords are stored locally on the thin client with `0600` permissions and never sent to the browser or web frontend):
 
 ```yaml
 version: 1
@@ -238,7 +238,33 @@ hosts:
     username: "operator"
 ```
 
-Configure the VNC remote assistance password (default: `thinclient`):
+Configure `/opt/thinclient/config/settings.yaml`:
+```yaml
+version: 1
+profile: "balanced"          # performance | balanced | quality
+resolution: "auto"           # auto | 1920x1080 | 1600x900 | 1280x720
+color_depth: 24              # 16 | 24 | 32
+sound: true
+auto_reconnect: true
+max_reconnect_retries: 3
+fullscreen: true
+vnc:
+  enabled: true
+  port: 5900
+  bind_tailscale_only: true  # Strictly binds to Tailscale IP; refuses LAN fallback
+web_admin:
+  bind: "127.0.0.1"           # Localhost only by default; 0.0.0.0 for remote administration
+  port: 8080
+  remote_enabled: false       # Set true to allow remote administration
+  admin_token: ""             # Secret token required for mutating remote API calls
+startup:
+  mode: "dashboard"           # 'dashboard' (kiosk UI) or 'direct_rdp' (instant FreeRDP)
+  connect_timeout_seconds: 20
+  max_initial_attempts: 1
+  fallback_to_dashboard: true
+```
+
+Configure the VNC remote assistance password (required before starting VNC):
 ```bash
 sudo x11vnc -storepasswd "YourSecurePassword" /opt/thinclient/config/x11vnc.pass
 sudo chmod 600 /opt/thinclient/config/x11vnc.pass
@@ -322,11 +348,29 @@ Supervisors or IT support personnel can view and control the thin client display
 - Enter the password configured in `/opt/thinclient/config/x11vnc.pass`.
 - An on-screen status badge notifies the local user that remote assistance is active.
 
-### 6. Diagnostics & System Health
+### 7. Diagnostics & System Health
 Access the **Diagnostica** tab to inspect:
 - Real-time MagicDNS latency and port 3389 reachability.
 - RAM usage, CPU temperature, and load average.
 - Undervoltage or thermal throttling alarms reported by the Raspberry Pi firmware.
+
+### 8. Direct-to-RDP Mode
+For dedicated fixed workstations, HidaThin can bypass Chromium Kiosk on boot and connect immediately to the default Windows PC:
+- Edit `/opt/thinclient/config/settings.yaml` and set:
+  ```yaml
+  startup:
+    mode: "direct_rdp"
+    connect_timeout_seconds: 20
+    fallback_to_dashboard: true
+  ```
+- At boot, the system waits for network and Tailscale, launches FreeRDP full-screen immediately.
+- If the remote PC is unreachable, authentication fails, or the session is voluntarily disconnected, the system automatically opens the Dashboard Kiosk without looping.
+
+### 9. Automated Test Suite
+Run the regression test suite covering all 25 validation scenarios (T01 - T25):
+```bash
+python3 -m pytest tests/ -v
+```
 
 ---
 
@@ -350,10 +394,18 @@ Access the **Diagnostica** tab to inspect:
 │   └── thinclient.logrotate # Logrotate configuration for session logs
 ├── scripts/
 │   ├── install.sh       # Wrapper for the root installer
+│   ├── direct_rdp_coordinator.py # Direct-to-RDP coordinator and fallback manager
 │   ├── optimize-boot.sh # Aggressive systemd service pruning for ultra-fast boot
 │   ├── setup-readonly-fs.sh # Soluzione B: Read-Only root + persistent /data
 │   ├── xinitrc          # X11 kiosk initialization (Openbox + Chromium)
-│   └── x11vnc-start.sh  # x11vnc watchdog with Tailscale-only binding
+│   └── x11vnc-start.sh  # x11vnc watchdog with strict Tailscale binding
+├── tests/
+│   ├── test_sec.py      # T01-T05: Security, credential isolation, and VNC tests
+│   ├── test_fs_installer.py # T06-T10: Read-only logging, persistence, installer tests
+│   ├── test_boot_status.py  # T11-T15: Boot splash speed, healthz, and state cache
+│   ├── test_rdp_lifecycle.py # T16, T17, T24: RDP session lifecycle & direct RDP
+│   ├── test_net_wifi.py # T18-T20: Tailscale cache, SSID parsing, profile preservation
+│   └── test_updater_settings.py # T21-T23, T25: OS updater lock, remount & settings schema
 ├── static/
 │   ├── css/style.css    # High-contrast, touch/mouse friendly dark theme
 │   ├── img/             # Splash screen and branding assets

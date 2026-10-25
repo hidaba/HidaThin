@@ -160,29 +160,44 @@ def set_vnc_password(password):
         logger.error(f"Failed to set VNC password: {e}")
         return False, f"Errore impostazione password VNC: {e}"
 
-def save_vnc_settings(enabled, bind_tailscale_only, new_password=None):
+def save_vnc_settings(enabled, bind_tailscale_only, new_password=None, port=None):
     """
     Persists VNC configuration to settings.yaml and starts/stops/restarts
     the thinclient-vnc systemd service accordingly.
+    Requires an explicit password before VNC can be enabled.
     """
     settings = get_settings()
     if "vnc" not in settings or not isinstance(settings["vnc"], dict):
         settings["vnc"] = {}
 
-    settings["vnc"]["enabled"] = bool(enabled)
-    settings["vnc"]["bind_tailscale_only"] = bool(bind_tailscale_only)
-    settings["vnc"]["port"] = DEFAULT_VNC_PORT
+    target_port = port if port is not None else settings["vnc"].get("port", DEFAULT_VNC_PORT)
+    try:
+        target_port = int(target_port)
+    except (ValueError, TypeError):
+        target_port = DEFAULT_VNC_PORT
 
-    # If a new password was provided, store it
-    if new_password and len(new_password.strip()) > 0:
+    # If user wants to enable VNC, ensure a password file exists or is being set
+    if enabled:
+        if new_password and len(new_password.strip()) > 0:
+            pw_ok, pw_msg = set_vnc_password(new_password)
+            if not pw_ok:
+                return False, pw_msg
+        elif not os.path.exists(PASS_FILE):
+            return False, "Impossibile attivare VNC senza aver impostato una password. Inserisci una password sicura."
+    elif new_password and len(new_password.strip()) > 0:
         pw_ok, pw_msg = set_vnc_password(new_password)
         if not pw_ok:
             return False, pw_msg
-    elif not os.path.exists(PASS_FILE):
-        # Create default password 'thinclient' if no password file exists yet
-        set_vnc_password("thinclient")
 
-    ok, msg = save_settings(settings)
+    vnc_update = {
+        "vnc": {
+            "enabled": bool(enabled),
+            "bind_tailscale_only": bool(bind_tailscale_only),
+            "port": target_port
+        }
+    }
+
+    ok, msg = save_settings(vnc_update)
     if not ok:
         return False, msg
 

@@ -3,29 +3,56 @@ import shutil
 import logging
 import re
 import time
+import threading
 
 logger = logging.getLogger("thinclient.wifi")
 
+_wifi_lock = threading.Lock()
 _network_status_cache = None
-_network_status_cache_time = 0.0
+_network_status_cache_mono = 0.0
 NETWORK_CACHE_TTL = 15.0
+
+def parse_nmcli_terse_line(line):
+    r"""
+    Parses a colon-delimited line from 'nmcli -t', properly unescaping '\:' and '\\'.
+    """
+    fields = []
+    current = []
+    escaped = False
+    for char in line:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == ":":
+            fields.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    if escaped:
+        current.append("\\")
+    fields.append("".join(current))
+    return fields
 
 def invalidate_network_cache():
     """Forces next get_network_status() call to re-query system status."""
-    global _network_status_cache, _network_status_cache_time
-    _network_status_cache = None
-    _network_status_cache_time = 0.0
+    global _network_status_cache, _network_status_cache_mono
+    with _wifi_lock:
+        _network_status_cache = None
+        _network_status_cache_mono = 0.0
 
 def get_network_status(force=False):
     """
     Returns current networking status for Wi-Fi and Ethernet.
-    Uses a 15-second cache to prevent excessive nmcli/dbus calls on Raspberry Pi.
+    Uses monotonic time cache to prevent excessive nmcli/dbus calls on Raspberry Pi.
     """
-    global _network_status_cache, _network_status_cache_time
+    global _network_status_cache, _network_status_cache_mono
 
-    now = time.time()
-    if not force and _network_status_cache is not None and (now - _network_status_cache_time) < NETWORK_CACHE_TTL:
-        return _network_status_cache
+    now = time.monotonic()
+    with _wifi_lock:
+        if not force and _network_status_cache is not None and (now - _network_status_cache_mono) < NETWORK_CACHE_TTL:
+            return dict(_network_status_cache)
 
     status = {
         "wifi": {
@@ -46,6 +73,9 @@ def get_network_status(force=False):
     }
 
     if not shutil.which("nmcli"):
+        with _wifi_lock:
+            _network_status_cache = status
+            _network_status_cache_mono = now
         return status
 
     try:
@@ -55,7 +85,7 @@ def get_network_status(force=False):
             capture_output=True, text=True, timeout=5
         )
         for line in res.stdout.strip().splitlines():
-            parts = line.split(":")
+            parts = parse_nmcli_terse_line(line)
             if len(parts) >= 4:
                 c_name, c_type, c_dev, c_state = parts[0], parts[1], parts[2], parts[3]
                 if "wireless" in c_type or c_dev.startswith("wl"):
@@ -117,17 +147,17 @@ def get_network_status(force=False):
                     capture_output=True, text=True, timeout=3
                 )
                 for line in res_sig.stdout.strip().splitlines():
-                    if line.startswith("*"):
-                        parts = line.split(":")
-                        if len(parts) >= 3:
-                            try:
-                                status["wifi"]["signal"] = int(parts[2])
-                            except ValueError:
-                                pass
+                    parts = parse_nmcli_terse_line(line)
+                    if len(parts) >= 3 and parts[0] == "*":
+                        try:
+                            status["wifi"]["signal"] = int(parts[2])
+                        except ValueError:
+                            pass
 
         status["primary_ip"] = status["ethernet"]["ip"] or status["wifi"]["ip"]
-        _network_status_cache = status
-        _network_status_cache_time = now
+        with _wifi_lock:
+            _network_status_cache = status
+            _network_status_cache_mono = now
     except Exception as e:
         logger.error(f"Error fetching network status: {e}")
 
@@ -148,7 +178,7 @@ def scan_wifi_networks():
         )
         seen = {}
         for line in res.stdout.strip().splitlines():
-            parts = line.split(":")
+            parts = parse_nmcli_terse_line(line)
             if len(parts) >= 4:
                 ssid = parts[0].strip()
                 if not ssid:
@@ -189,7 +219,7 @@ def _find_connection_uuids_for_ssid(ssid):
             capture_output=True, text=True, timeout=5
         )
         for line in res.stdout.strip().splitlines():
-            parts = line.split(":")
+            parts = parse_nmcli_terse_line(line)
             if len(parts) >= 3:
                 uuid = parts[0]
                 name = parts[1]
@@ -211,8 +241,7 @@ def _find_connection_uuids_for_ssid(ssid):
 
 def _delete_existing_wifi_profiles(ssid):
     """
-    Deletes any existing NetworkManager connection profiles matching the SSID.
-    Prevents stale credentials, 'no secrets available' lockups, and misconfigured profiles.
+    Deletes connection profiles matching the SSID (used when explicitly forgetting a network).
     """
     if not shutil.which("nmcli") or not ssid:
         return
@@ -220,12 +249,11 @@ def _delete_existing_wifi_profiles(ssid):
     uuids = _find_connection_uuids_for_ssid(ssid)
     for u in uuids:
         try:
-            logger.info(f"Removing pre-existing profile {u} for SSID '{ssid}'")
+            logger.info(f"Removing profile {u} for SSID '{ssid}'")
             subprocess.run(["nmcli", "connection", "delete", u], capture_output=True, timeout=5)
         except Exception as e:
             logger.warning(f"Failed to delete profile {u}: {e}")
 
-    # Also clean up by exact name in case UUID listing missed it
     try:
         subprocess.run(["nmcli", "connection", "delete", ssid], capture_output=True, timeout=3)
     except Exception:
@@ -233,11 +261,8 @@ def _delete_existing_wifi_profiles(ssid):
 
 def connect_wifi(ssid, password=None):
     """
-    Connects to a Wi-Fi network cleanly using nmcli:
-    1. Removes any stale/broken connection profiles for the target SSID to avoid 'no-secrets' errors.
-    2. Runs 'nmcli device wifi connect' with proper timeout and interface binding.
-    3. If connection fails, automatically deletes the broken profile created by NM and returns a clear error.
-    4. If connection succeeds, ensures autoconnect is enabled and invalidates network cache.
+    Connects to a Wi-Fi network cleanly without prematurely destroying existing profiles.
+    Preserves existing working profile if authentication fails.
     """
     if not shutil.which("nmcli"):
         return False, "Strumento nmcli non disponibile nel sistema"
@@ -247,15 +272,13 @@ def connect_wifi(ssid, password=None):
 
     logger.info(f"Initiating Wi-Fi connection to '{ssid}'")
 
-    # 1. Clean up any existing profiles for this SSID before attempting connection
-    _delete_existing_wifi_profiles(ssid)
+    # Record existing profiles for this SSID before connecting
+    existing_uuids = set(_find_connection_uuids_for_ssid(ssid))
 
-    # 2. Build nmcli command
     cmd = ["nmcli", "device", "wifi", "connect", ssid]
     if password:
         cmd.extend(["password", password])
 
-    # Specify wlan interface
     net_status = get_network_status(force=False)
     wlan_iface = net_status.get("wifi", {}).get("interface") or "wlan0"
     cmd.extend(["ifname", wlan_iface])
@@ -280,12 +303,18 @@ def connect_wifi(ssid, password=None):
             return True, f"Connesso con successo alla rete '{ssid}'"
         else:
             logger.warning(f"Failed to connect to Wi-Fi '{ssid}'. Exit code {proc.returncode}. Stderr: {err} Stdout: {out}")
-            # Clean up the broken profile so NM is not stuck in need-auth
-            _delete_existing_wifi_profiles(ssid)
+            # Clean up only newly created broken profiles that were not present beforehand
+            current_uuids = set(_find_connection_uuids_for_ssid(ssid))
+            newly_created = current_uuids - existing_uuids
+            for u in newly_created:
+                try:
+                    subprocess.run(["nmcli", "connection", "delete", u], capture_output=True, timeout=3)
+                except Exception:
+                    pass
 
             combined_err = f"{err} {out}".lower()
             if any(k in combined_err for k in ["secrets were required", "no secrets", "secret", "4-way", "psk", "wrong_key", "authenticat"]):
-                msg = "Password errata o autenticazione non riuscita. Verifica la password e riprova."
+                msg = "Password errata o autenticazione non riuscita. La configurazione precedente è stata preservata."
             elif any(k in combined_err for k in ["no network with ssid", "not found", "scanning"]):
                 msg = f"Rete Wi-Fi '{ssid}' non trovata o fuori portata. Aggiorna la scansione."
             elif "timeout" in combined_err:
@@ -297,14 +326,37 @@ def connect_wifi(ssid, password=None):
 
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout while connecting to Wi-Fi '{ssid}'")
-        _delete_existing_wifi_profiles(ssid)
+        current_uuids = set(_find_connection_uuids_for_ssid(ssid))
+        for u in (current_uuids - existing_uuids):
+            try:
+                subprocess.run(["nmcli", "connection", "delete", u], capture_output=True, timeout=3)
+            except Exception:
+                pass
         invalidate_network_cache()
         return False, "Timeout durante la connessione Wi-Fi (il punto di accesso non ha risposto)."
     except Exception as e:
         logger.error(f"Unexpected error connecting to Wi-Fi '{ssid}': {e}")
-        _delete_existing_wifi_profiles(ssid)
         invalidate_network_cache()
         return False, f"Errore imprevisto: {str(e)}"
+
+def forget_wifi(ssid):
+    """
+    Deletes all saved connection profiles for an SSID and invalidates network cache.
+    """
+    if not shutil.which("nmcli"):
+        return False, "Strumento nmcli non disponibile"
+
+    if not ssid:
+        return False, "SSID non specificato"
+
+    try:
+        _delete_existing_wifi_profiles(ssid)
+        invalidate_network_cache()
+        logger.info(f"Forgot Wi-Fi network '{ssid}'")
+        return True, f"Rete '{ssid}' rimossa con successo"
+    except Exception as e:
+        logger.error(f"Error forgetting Wi-Fi '{ssid}': {e}")
+        return False, str(e)
 
 def forget_wifi(ssid):
     """

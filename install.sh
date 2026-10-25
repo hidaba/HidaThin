@@ -132,20 +132,33 @@ fi
 # ------------------------------------------------------------------------------
 echo -e "\n${BLUE}[4/8] Distribuzione del codice in ${INSTALL_DIR}...${NC}"
 
-mkdir -p "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/logs"
-mkdir -p "$INSTALL_DIR/config"
-
 if [ -n "$SCRIPT_SOURCE_DIR" ] && [ "$SCRIPT_SOURCE_DIR" != "$INSTALL_DIR" ]; then
     echo -e "      Sincronizzazione file da directory locale: ${SCRIPT_SOURCE_DIR}"
-    # Backup user configuration if already present in target
-    [ -f "$INSTALL_DIR/config/hosts.yaml" ] && cp -n "$INSTALL_DIR/config/hosts.yaml" "$INSTALL_DIR/config/hosts.yaml.bak" || true
-    [ -f "$INSTALL_DIR/config/settings.yaml" ] && cp -n "$INSTALL_DIR/config/settings.yaml" "$INSTALL_DIR/config/settings.yaml.bak" || true
-
-    cp -ru "$SCRIPT_SOURCE_DIR"/* "$INSTALL_DIR"/ 2>/dev/null || cp -r "$SCRIPT_SOURCE_DIR"/* "$INSTALL_DIR"/
+    mkdir -p "$INSTALL_DIR"
+    for item in "$SCRIPT_SOURCE_DIR"/*; do
+        base="$(basename "$item")"
+        if [ "$base" = "config" ]; then
+            mkdir -p "$INSTALL_DIR/config"
+            for cfg in "$item"/*; do
+                [ -f "$cfg" ] || continue
+                cfg_base="$(basename "$cfg")"
+                if [ ! -f "$INSTALL_DIR/config/$cfg_base" ]; then
+                    cp -a "$cfg" "$INSTALL_DIR/config/$cfg_base"
+                fi
+            done
+        else
+            cp -ru "$item" "$INSTALL_DIR/" 2>/dev/null || cp -r "$item" "$INSTALL_DIR/"
+        fi
+    done
 elif [ ! -d "$INSTALL_DIR/.git" ] && [ ! -f "$INSTALL_DIR/app/main.py" ]; then
-    echo -e "      Clonazione del repository GitHub ${REPO_URL}..."
-    git clone "$REPO_URL" "$INSTALL_DIR"
+    echo -e "      Clonazione del repository GitHub ${REPO_URL} in directory di staging..."
+    STAGING_DIR="/tmp/hidathin-staging-$$"
+    rm -rf "$STAGING_DIR"
+    git clone "$REPO_URL" "$STAGING_DIR"
+    mkdir -p "$INSTALL_DIR"
+    cp -a "$STAGING_DIR"/* "$INSTALL_DIR/"
+    [ -d "$STAGING_DIR/.git" ] && cp -a "$STAGING_DIR/.git" "$INSTALL_DIR/"
+    rm -rf "$STAGING_DIR"
 else
     echo -e "      Repository già presente in ${INSTALL_DIR}."
     if [ -d "$INSTALL_DIR/.git" ]; then
@@ -154,7 +167,9 @@ else
     fi
 fi
 
-# Ensure default configs exist if not present
+mkdir -p "$INSTALL_DIR/config"
+
+# Ensure default configs exist if not present (never overwrite user config)
 if [ ! -f "$INSTALL_DIR/config/hosts.yaml" ]; then
     if [ -f "$INSTALL_DIR/config/hosts.yaml.example" ]; then
         cp "$INSTALL_DIR/config/hosts.yaml.example" "$INSTALL_DIR/config/hosts.yaml"
@@ -178,30 +193,38 @@ if [ ! -f "$INSTALL_DIR/config/settings.yaml" ]; then
         cp "$INSTALL_DIR/config/settings.yaml.example" "$INSTALL_DIR/config/settings.yaml"
     else
         cat << 'EOF' > "$INSTALL_DIR/config/settings.yaml"
-performance_profile: balanced
-resolution: fullscreen
-bpp: 32
-sound: sys:alsa
-clipboard: true
-home_drive: false
-vnc_shadowing: true
-vnc_bind_tailscale: true
+version: 1
+profile: "balanced"
+resolution: "auto"
+color_depth: 24
+sound: true
+auto_reconnect: true
+max_reconnect_retries: 3
+fullscreen: true
+vnc:
+  enabled: true
+  port: 5900
+  bind_tailscale_only: true
+web_admin:
+  bind: "127.0.0.1"
+  port: 8080
+  remote_enabled: false
+  admin_token: ""
+startup:
+  mode: "dashboard"
+  connect_timeout_seconds: 20
+  max_initial_attempts: 1
+  fallback_to_dashboard: true
 EOF
     fi
 fi
 
-# Generate default VNC password if not configured
-if [ ! -f "$INSTALL_DIR/config/x11vnc.pass" ]; then
-    echo -e "      Configurazione password iniziale VNC Remote Assistance ('thinclient')..."
-    x11vnc -storepasswd "thinclient" "$INSTALL_DIR/config/x11vnc.pass" >/dev/null 2>&1 || true
-    chmod 600 "$INSTALL_DIR/config/x11vnc.pass" 2>/dev/null || true
-fi
-
-# Fix permissions
+# Fix permissions securely
 chown -R root:root "$INSTALL_DIR"
 chmod -R u=rwX,go=rX "$INSTALL_DIR"
-chmod +x "$INSTALL_DIR/scripts/"*.sh "$INSTALL_DIR/scripts/xinitrc" "$INSTALL_DIR/install.sh" 2>/dev/null || true
-chmod 600 "$INSTALL_DIR/config/x11vnc.pass" 2>/dev/null || true
+chmod 700 "$INSTALL_DIR/config"
+chmod 600 "$INSTALL_DIR/config/"*.yaml "$INSTALL_DIR/config/"*.pass 2>/dev/null || true
+chmod +x "$INSTALL_DIR/scripts/"*.sh "$INSTALL_DIR/scripts/xinitrc" "$INSTALL_DIR/scripts/"*.py "$INSTALL_DIR/install.sh" 2>/dev/null || true
 
 # ------------------------------------------------------------------------------
 # 6. Hardware, Kernel & OS Optimizations
@@ -316,7 +339,7 @@ echo -e "Stato componenti installati:"
 echo -e "  • Percorso installazione: ${BOLD}${INSTALL_DIR}${NC}"
 echo -e "  • Backend Flask Web Service: ${GREEN}Attivo${NC} (porta 8080)"
 echo -e "  • Graphical Kiosk UI: ${GREEN}Configurato${NC} (TTY1 / DISPLAY :0)"
-echo -e "  • Remote Assistance (VNC): ${GREEN}Attivo${NC} (porta 5900, pwd: 'thinclient')"
+echo -e "  • Remote Assistance (VNC): ${GREEN}Configurato${NC} (porta 5900, Tailscale-only)"
 echo -e "  • CPU Governor: ${GREEN}Performance${NC} (bassa latenza)"
 echo -e "  • Mouse Polling / Flat: ${GREEN}500 Hz / Profilo Lineare 1:1${NC}"
 
@@ -327,4 +350,3 @@ echo -e "  2. Riavvia per applicare tutte le modifiche del kernel e avviare la G
 echo -e "     ${BOLD}sudo reboot${NC}"
 echo -e "  3. (Opzionale) Configura il filesystem in sola lettura contro lo spegnimento brutale:"
 echo -e "     ${BOLD}sudo bash /opt/thinclient/scripts/setup-readonly-fs.sh${NC}\n"
-EOF

@@ -29,7 +29,7 @@
                         <td>{{ host.ip or '--' }}</td>
                         <td>
                             {{ host.username or '--' }}
-                            {% if host.password %}
+                            {% if host.has_password %}
                             <span title="Password salvata" style="color: #4ade80; margin-left: 6px; font-size: 0.85em;">🔒 Salvata</span>
                             {% endif %}
                         </td>
@@ -42,8 +42,16 @@
                             {% endif %}
                         </td>
                         <td>
-                            <button class="btn btn-small btn-secondary" onclick="testHostReachability('{{ host.hostname }}')">Ping</button>
-                            <button class="btn btn-small btn-secondary" onclick='editHost({{ key|tojson }}, {{ host|tojson }})'>Modifica</button>
+                            <button class="btn btn-small btn-secondary" onclick="testHostReachability('{{ host.hostname }}', '{{ host.ip or '' }}')">Ping</button>
+                            <button class="btn btn-small btn-secondary btn-edit-host"
+                                    data-key="{{ key }}"
+                                    data-name="{{ host.name }}"
+                                    data-hostname="{{ host.hostname }}"
+                                    data-ip="{{ host.ip or '' }}"
+                                    data-port="{{ host.port or 3389 }}"
+                                    data-username="{{ host.username or '' }}"
+                                    data-has-password="{{ '1' if host.has_password else '0' }}"
+                                    onclick="editHostFromButton(this)">Modifica</button>
                             <button class="btn btn-small btn-danger" onclick="deleteHost('{{ key }}')">Elimina</button>
                         </td>
                     </tr>
@@ -82,7 +90,15 @@
         </div>
         <div class="form-group">
             <label for="host-password">Password Windows salvata (opzionale):</label>
-            <input type="password" id="host-password" class="input-text" placeholder="Lascia vuoto se non impostata">
+            <input type="password" id="host-password" class="input-text" placeholder="Lascia vuoto per non modificare">
+            <div id="host-saved-pwd-notice" style="display: none; margin-top: 6px; font-size: 0.88em; color: #4ade80;">
+                <span>🔒 Una password è già salvata. Lascia il campo vuoto per mantenerla.</span>
+                <div style="margin-top: 4px;">
+                    <label style="cursor: pointer; color: #f87171;">
+                        <input type="checkbox" id="host-clear-password" onchange="onClearPasswordToggle(this.checked)"> Elimina password salvata
+                    </label>
+                </div>
+            </div>
         </div>
         <div class="form-group">
             <label for="host-port">Porta RDP:</label>
@@ -111,22 +127,60 @@ function openHostModal() {
     document.getElementById('host-ip').value = "";
     document.getElementById('host-username').value = "";
     document.getElementById('host-password').value = "";
+    document.getElementById('host-password').placeholder = "Password Windows (opzionale)";
+    document.getElementById('host-password').disabled = false;
+    document.getElementById('host-saved-pwd-notice').style.display = "none";
+    document.getElementById('host-clear-password').checked = false;
     document.getElementById('host-port').value = "3389";
     document.getElementById('host-default').checked = false;
     document.getElementById('host-modal').style.display = 'flex';
 }
 
-function editHost(key, host) {
-    document.getElementById('host-modal-title').innerText = `Modifica ${host.name}`;
+function editHostFromButton(btn) {
+    const key = btn.getAttribute('data-key');
+    const name = btn.getAttribute('data-name');
+    const hostname = btn.getAttribute('data-hostname');
+    const ip = btn.getAttribute('data-ip');
+    const port = btn.getAttribute('data-port');
+    const username = btn.getAttribute('data-username');
+    const hasPassword = btn.getAttribute('data-has-password') === '1';
+
+    document.getElementById('host-modal-title').innerText = `Modifica ${name}`;
     document.getElementById('host-key').value = key;
-    document.getElementById('host-name').value = host.name || "";
-    document.getElementById('host-hostname').value = host.hostname || "";
-    document.getElementById('host-ip').value = host.ip || "";
-    document.getElementById('host-username').value = host.username || "";
-    document.getElementById('host-password').value = host.password || "";
-    document.getElementById('host-port').value = host.port || 3389;
+    document.getElementById('host-name').value = name || "";
+    document.getElementById('host-hostname').value = hostname || "";
+    document.getElementById('host-ip').value = ip || "";
+    document.getElementById('host-username').value = username || "";
+    document.getElementById('host-password').value = "";
+    document.getElementById('host-password').disabled = false;
+    document.getElementById('host-port').value = port || 3389;
     document.getElementById('host-default').checked = (key === "{{ default_host }}");
+
+    const pwdNotice = document.getElementById('host-saved-pwd-notice');
+    const clearPwdChk = document.getElementById('host-clear-password');
+    clearPwdChk.checked = false;
+
+    if (hasPassword) {
+        pwdNotice.style.display = "block";
+        document.getElementById('host-password').placeholder = "Lascia vuoto per mantenere la password salvata";
+    } else {
+        pwdNotice.style.display = "none";
+        document.getElementById('host-password').placeholder = "Password Windows (opzionale)";
+    }
+
     document.getElementById('host-modal').style.display = 'flex';
+}
+
+function onClearPasswordToggle(isClearChecked) {
+    const passInput = document.getElementById('host-password');
+    if (isClearChecked) {
+        passInput.value = "";
+        passInput.disabled = true;
+        passInput.placeholder = "La password verrà rimossa al salvataggio";
+    } else {
+        passInput.disabled = false;
+        passInput.placeholder = "Lascia vuoto per mantenere la password salvata";
+    }
 }
 
 function closeHostModal() {
@@ -140,6 +194,7 @@ function saveHost() {
     const ip = document.getElementById('host-ip').value.trim();
     const username = document.getElementById('host-username').value.trim();
     const password = document.getElementById('host-password').value;
+    const clearPassword = document.getElementById('host-clear-password').checked;
     const port = parseInt(document.getElementById('host-port').value) || 3389;
     const isDefault = document.getElementById('host-default').checked;
 
@@ -151,7 +206,17 @@ function saveHost() {
     fetch('/api/hosts/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, name, hostname, ip, username, password, port, is_default: isDefault })
+        body: JSON.stringify({
+            key,
+            name,
+            hostname,
+            ip,
+            username,
+            password,
+            clear_password: clearPassword,
+            port,
+            is_default: isDefault
+        })
     })
     .then(r => r.json())
     .then(data => {
@@ -161,6 +226,9 @@ function saveHost() {
         } else {
             showModal("Errore", data.message);
         }
+    })
+    .catch(() => {
+        showModal("Errore", "Errore di comunicazione con il servizio.");
     });
 }
 
@@ -198,9 +266,13 @@ function setDefaultHost(key) {
     });
 }
 
-function testHostReachability(host) {
+function testHostReachability(host, ip) {
     showModal("Test Connessione", `Test ping verso ${host}...`);
-    fetch(`/api/tailscale/ping?host=${encodeURIComponent(host)}`)
+    let url = `/api/tailscale/ping?host=${encodeURIComponent(host)}`;
+    if (ip) {
+        url += `&ip=${encodeURIComponent(ip)}`;
+    }
+    fetch(url)
     .then(r => r.json())
     .then(data => {
         showModal(`Esito Ping: ${host}`, data.success ? `Successo! ${data.message}` : `Fallito: ${data.message}`);

@@ -6,10 +6,9 @@ Questo documento raccoglie le attività pianificate e le ottimizzazioni architet
 
 ## ⚡ 1. Ottimizzazione Boot Speed (Ispirate da WTware)
 
-- [ ] **Modalità "Direct-to-RDP" / Auto-Connect (Bypass Browser)**
-  - *Obiettivo*: Se è impostato un host predefinito (`auto_connect: true` in `hosts.yaml`), avviare `xfreerdp3` direttamente al boot senza attendere né aprire Chromium Kiosk.
-  - *Comportamento di fallback*: Se la sessione RDP termina o fallisce, aprire il Kiosk/Dashboard o un menu di riconnessione rapido.
-  - *Guadagno stimato*: **-5 / 7 secondi** al boot per postazioni fisse.
+- [x] **Modalità "Direct-to-RDP" / Auto-Connect (Bypass Browser)**
+  - *Implementato*: Introdotta modalità configurabile `startup.mode: direct_rdp` in `settings.yaml` gestita dal coordinatore dedicato [`scripts/direct_rdp_coordinator.py`](file:///y:/Progetti/thinclient/scripts/direct_rdp_coordinator.py) e [`scripts/xinitrc`](file:///y:/Progetti/thinclient/scripts/xinitrc). All'avvio il coordinatore attende la disponibilità di rete e Tailscale ed effettua la connessione FreeRDP verso l'host predefinito lasciando inizialmente spento Chromium. In caso di errore, timeout o disconnessione, effettua un fallback pulito alla Dashboard Kiosk senza loop infiniti.
+  - *Test*: Coperto da suite automatizzata (T24). Misurazione cronometrica specifica su dispositivo hardware fisico programmata con i comandi di benchmark.
 
 - [ ] **Sostituzione o Alleggerimento di Chromium Kiosk UI**
   - *Problema*: Chromium è il collo di bottiglia principale all'avvio (~250-400 MB RAM e 5-7s di caricamento su ARM Cortex-A53).

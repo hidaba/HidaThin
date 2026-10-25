@@ -9,9 +9,6 @@ from app.system import get_settings, get_system_metrics
 
 logger = logging.getLogger("thinclient.rdp")
 
-LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
-RDP_LOG = os.path.join(LOGS_DIR, "rdp.log")
-
 FREERDP_ERROR_MESSAGES = {
     23: "Errore nei parametri di avvio FreeRDP (argomento riga di comando non valido).",
     145: "Autenticazione NLA richiesta. Inserisci Nome Utente e Password nelle Opzioni di accesso Windows.",
@@ -24,20 +21,86 @@ FREERDP_ERROR_MESSAGES = {
 def get_freerdp_error_description(retcode):
     return FREERDP_ERROR_MESSAGES.get(retcode, f"Sessione terminata con errore (codice: {retcode})")
 
-class RDPManager:
-    def __init__(self):
+def get_runtime_log_dir():
+    """
+    Returns a writable directory for runtime/session logs.
+    Prioritizes volatile tmpfs paths: /run/thinclient, /tmp/thinclient-logs, then project logs.
+    """
+    candidates = [
+        "/run/thinclient",
+        "/tmp/thinclient-logs",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+    ]
+    for candidate in candidates:
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            test_file = os.path.join(candidate, f".write_test_{os.getpid()}")
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.remove(test_file)
+            return candidate
+        except Exception:
+            continue
+    return "/tmp"
+
+def open_runtime_log(filename):
+    """
+    Opens a log file in the runtime directory.
+    Falls back gracefully to os.devnull if directory is unwritable (e.g. strict EROFS).
+    """
+    log_dir = get_runtime_log_dir()
+    filepath = os.path.join(log_dir, filename)
+    try:
+        f = open(filepath, "a")
+        return f, filepath
+    except OSError as e:
+        logger.warning(f"Unable to open runtime log {filepath} ({e}). Falling back to null device.")
+        return open(os.devnull, "w"), os.devnull
+
+def coordinate_kiosk_browser(action="stop"):
+    """
+    Coordinates kiosk browser suspension/resumption without affecting unrelated processes.
+    Only signals chromium processes running with kiosk/app flags.
+    """
+    if sys.platform != "linux":
+        return
+    sig = "-STOP" if action == "stop" else "-CONT"
+    try:
+        subprocess.run(["pkill", sig, "-f", "chromium.*--kiosk"], check=False)
+        subprocess.run(["pkill", sig, "-f", "chromium.*--app="], check=False)
+        logger.info(f"Kiosk browser signaled with {sig}")
+    except Exception as ce:
+        logger.warning(f"Could not signal kiosk browser ({action}): {ce}")
+
+class RDPSession:
+    """Encapsulates a distinct RDP session and all related subprocesses and state."""
+    def __init__(self, session_id, host_entry, effective_user, target_address):
+        self.session_id = session_id
+        self.host_entry = host_entry
+        self.effective_user = effective_user
+        self.target_address = target_address
+        self.host_name = host_entry.get("name") or target_address
         self.process = None
         self.overlay_process = None
-        self.state = "IDLE"  # IDLE, CONNECTING, CONNECTED, DISCONNECTED, ERROR
-        self.current_host = None
-        self.error_message = None
+        self.log_file = None
+        self.state = "CONNECTING"  # CONNECTING, CONNECTED, DISCONNECTING, ERROR, IDLE
         self.user_cancelled = False
-        self.lock = threading.Lock()
-        self.monitor_thread = None
-        os.makedirs(LOGS_DIR, exist_ok=True)
+        self.error_message = None
+        self.start_mono = time.monotonic()
 
-    def _start_overlay(self, host_label):
-        """Launches the lightweight Tkinter hot-corner overlay on DISPLAY=:0."""
+class RDPManager:
+    """
+    Manages active FreeRDP sessions, OSD overlay, and kiosk browser coordination.
+    Ensures that stale session monitors do not interfere with new active sessions.
+    """
+    def __init__(self):
+        self.active_session = None
+        self.lock = threading.Lock()
+        self.session_counter = 0
+        self.last_error = None
+
+    def _start_overlay(self, session):
+        """Launches the lightweight Tkinter hot-corner overlay on DISPLAY=:0 for the session."""
         try:
             overlay_script = os.path.join(os.path.dirname(__file__), "overlay.py")
             env = dict(os.environ)
@@ -48,42 +111,54 @@ class RDPManager:
                     env["XAUTHORITY"] = auth
                     break
 
-            overlay_log = os.path.join(LOGS_DIR, "overlay.log")
-            log_f = open(overlay_log, "a")
-            log_f.write(f"\n--- Starting overlay at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
-            log_f.flush()
+            log_f, _ = open_runtime_log("overlay.log")
+            try:
+                log_f.write(f"\n--- Starting overlay [Session {session.session_id}] at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+                log_f.flush()
+            except Exception:
+                pass
 
-            self.overlay_process = subprocess.Popen(
-                [sys.executable, overlay_script, "--host", str(host_label or "PC Remoto")],
+            session.overlay_process = subprocess.Popen(
+                [sys.executable, overlay_script, "--host", str(session.host_name or "PC Remoto")],
                 env=env,
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
-                preexec_fn=os.setsid
+                start_new_session=True
             )
-            logger.info(f"Started hot-corner overlay process (PID {self.overlay_process.pid})")
+            logger.info(f"Started overlay for session {session.session_id} (PID {session.overlay_process.pid})")
         except Exception as oe:
-            logger.warning(f"Could not start hot-corner overlay: {oe}")
-            self.overlay_process = None
+            logger.warning(f"Could not start overlay for session {session.session_id}: {oe}")
+            session.overlay_process = None
 
-    def _stop_overlay(self):
-        """Stops the hot-corner overlay process."""
-        if self.overlay_process and self.overlay_process.poll() is None:
+    def _stop_overlay(self, session):
+        """Stops the hot-corner overlay process associated with this session."""
+        if session.overlay_process and session.overlay_process.poll() is None:
             try:
-                self.overlay_process.terminate()
-                time.sleep(0.2)
-                if self.overlay_process.poll() is None:
-                    self.overlay_process.kill()
-                logger.info("Stopped hot-corner overlay process")
+                session.overlay_process.terminate()
+                try:
+                    session.overlay_process.wait(timeout=0.6)
+                except subprocess.TimeoutExpired:
+                    session.overlay_process.kill()
+                logger.info(f"Stopped overlay for session {session.session_id}")
             except Exception as oe:
                 logger.warning(f"Error terminating overlay: {oe}")
-            self.overlay_process = None
+            session.overlay_process = None
 
     def get_status(self):
+        """Returns the current RDP manager status snapshot."""
         with self.lock:
+            if self.active_session is not None:
+                return {
+                    "state": self.active_session.state,
+                    "host": self.active_session.host_name,
+                    "error": self.active_session.error_message or self.last_error,
+                    "session_id": self.active_session.session_id
+                }
             return {
-                "state": self.state,
-                "host": self.current_host,
-                "error": self.error_message
+                "state": "IDLE",
+                "host": None,
+                "error": self.last_error,
+                "session_id": None
             }
 
     def _find_freerdp_binary(self):
@@ -101,14 +176,17 @@ class RDPManager:
         password: optional Windows password (passed securely via stdin, never CLI)
         """
         with self.lock:
-            if self.process is not None and self.process.poll() is None:
-                return False, "Una sessione RDP è già attiva."
+            if self.active_session is not None and self.active_session.process is not None:
+                if self.active_session.process.poll() is None:
+                    return False, "Una sessione RDP è già attiva."
 
             bin_path = self._find_freerdp_binary()
             if not bin_path:
-                self.state = "ERROR"
-                self.error_message = "FreeRDP (xfreerdp3 / xfreerdp) non trovato nel sistema."
-                return False, self.error_message
+                self.last_error = "FreeRDP (xfreerdp3 / xfreerdp) non trovato nel sistema."
+                return False, self.last_error
+
+            self.session_counter += 1
+            session_id = self.session_counter
 
             settings = get_settings()
             profile = settings.get("profile", "balanced")
@@ -122,11 +200,9 @@ class RDPManager:
             if port and port != "3389":
                 target_address = f"{target_address}:{port}"
 
-            # Effective username: explicitly provided or default from host entry
             effective_user = (username.strip() if username else "") or (host_entry.get("username") or "").strip()
             effective_password = password if (password is not None and password != "") else host_entry.get("password")
 
-            # Base arguments for FreeRDP 3 with GPU/X11 Glamor acceleration
             cmd = [
                 bin_path,
                 f"/v:{target_address}",
@@ -143,7 +219,6 @@ class RDPManager:
             if effective_password:
                 cmd.append("/from-stdin:force")
 
-            # Resolution & Screen mode
             if fullscreen:
                 cmd.append("/f")
             else:
@@ -153,9 +228,7 @@ class RDPManager:
                     res_setting = metrics.get("resolution", "1920x1080")
                 cmd.append(f"/size:{res_setting}")
 
-            # Profile optimizations
             if profile == "performance":
-                # Maximum responsiveness on RPi 3: RFX + thin client + no desktop effects
                 cmd.extend([
                     "/network:broadband",
                     "/compression",
@@ -172,8 +245,7 @@ class RDPManager:
                     "+themes",
                     "/gfx:AVC420"
                 ])
-            else:  # balanced (default)
-                # Progressive rendering + thin client: fast initial response, crisp font, low latency
+            else:  # balanced
                 cmd.extend([
                     "/network:broadband",
                     "/compression",
@@ -183,126 +255,132 @@ class RDPManager:
                     "-window-drag"
                 ])
 
-            # Audio
             if sound_enabled:
                 cmd.append("/sound:sys:alsa")
             else:
                 cmd.append("-sound")
 
-            # Reconnection policy
             if settings.get("auto_reconnect", True):
                 cmd.extend([
                     "+auto-reconnect",
                     f"/auto-reconnect-max-retries:{settings.get('max_reconnect_retries', 3)}"
                 ])
 
-            logger.info(f"Starting FreeRDP with command: {' '.join(cmd)}")
-            self.state = "CONNECTING"
-            self.current_host = host_entry.get("name", target_address)
-            self.error_message = None
-            self.user_cancelled = False
+            logger.info(f"Starting FreeRDP [Session {session_id}] for {target_address}")
+
+            session = RDPSession(session_id, host_entry, effective_user, target_address)
+            self.active_session = session
+            self.last_error = None
+
+            log_file, _ = open_runtime_log("rdp.log")
+            session.log_file = log_file
 
             try:
-                # Append session log
-                log_file = open(RDP_LOG, "a")
-                log_file.write(f"\n--- Nuova sessione RDP verso {self.current_host} ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
+                log_file.write(f"\n--- Nuova sessione RDP [ID: {session_id}] verso {session.host_name} ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
                 log_file.flush()
+            except Exception:
+                pass
 
-                env = dict(os.environ)
-                env["DISPLAY"] = ":0"
+            env = dict(os.environ)
+            env["DISPLAY"] = ":0"
 
-                self.process = subprocess.Popen(
+            try:
+                session.process = subprocess.Popen(
                     cmd,
                     stdin=subprocess.PIPE if effective_password else None,
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     env=env,
-                    preexec_fn=os.setsid
+                    start_new_session=True
                 )
-
-                if effective_password:
-                    try:
-                        self.process.stdin.write(f"{effective_password}\n".encode("utf-8"))
-                        self.process.stdin.flush()
-                        self.process.stdin.close()
-                    except Exception as pe:
-                        logger.error(f"Error passing password to FreeRDP: {pe}")
-
-                self.monitor_thread = threading.Thread(target=self._monitor_session, args=(log_file,), daemon=True)
-                self.monitor_thread.start()
-                self._start_overlay(self.current_host)
-                return True, "Connessione RDP avviata"
             except Exception as e:
-                self.state = "ERROR"
-                self.error_message = str(e)
+                self.active_session = None
+                session.state = "ERROR"
+                self.last_error = str(e)
+                try:
+                    log_file.close()
+                except Exception:
+                    pass
                 logger.error(f"Failed to start FreeRDP: {e}")
                 return False, str(e)
 
-    def _monitor_session(self, log_file):
-        """Monitors FreeRDP process termination and manages kiosk browser suspension."""
-        # Watchdog: transition to CONNECTED after 1.5s if process is still running
-        def check_connected():
-            time.sleep(1.5)
-            with self.lock:
-                if self.process and self.process.poll() is None and self.state == "CONNECTING":
-                    self.state = "CONNECTED"
-                    # Suspend background Chromium to free 100% CPU and avoid swapping to MicroSD
-                    try:
-                        subprocess.run(["pkill", "-STOP", "-x", "chromium"], check=False)
-                        logger.info("Suspended Chromium Kiosk during active RDP session")
-                    except Exception as ce:
-                        logger.warning(f"Could not suspend Chromium: {ce}")
+            if effective_password and session.process.stdin:
+                try:
+                    session.process.stdin.write(f"{effective_password}\n".encode("utf-8"))
+                    session.process.stdin.flush()
+                    session.process.stdin.close()
+                except Exception as pe:
+                    logger.error(f"Error passing password to FreeRDP: {pe}")
 
-        threading.Thread(target=check_connected, daemon=True).start()
+            self._start_overlay(session)
 
-        # Wait until process ends
-        retcode = self.process.wait()
+            # Watchdog thread: sets CONNECTED state if process survives initial startup
+            threading.Thread(target=self._watchdog_connected, args=(session,), daemon=True).start()
 
-        # Stop hot-corner overlay
-        self._stop_overlay()
+            # Session monitor thread: waits on process exit and cleans up
+            threading.Thread(target=self._monitor_session, args=(session,), daemon=True).start()
 
-        # Immediately resume background Chromium when RDP session ends
-        try:
-            subprocess.run(["pkill", "-CONT", "-x", "chromium"], check=False)
-            logger.info("Resumed Chromium Kiosk after RDP session ended")
-        except Exception as ce:
-            logger.warning(f"Could not resume Chromium: {ce}")
+            return True, "Connessione RDP avviata"
+
+    def _watchdog_connected(self, session):
+        """Transitions state to CONNECTED after 1.5s if session process is still running."""
+        time.sleep(1.5)
+        with self.lock:
+            if self.active_session is session and session.state == "CONNECTING":
+                if session.process and session.process.poll() is None:
+                    session.state = "CONNECTED"
+                    coordinate_kiosk_browser("stop")
+
+    def _monitor_session(self, session):
+        """Monitors FreeRDP process termination with session isolation."""
+        retcode = session.process.wait()
+
+        self._stop_overlay(session)
+        coordinate_kiosk_browser("cont")
 
         with self.lock:
-            log_file.write(f"\n--- Sessione RDP terminata con codice {retcode} ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
-            log_file.close()
-            self.process = None
-            self.state = "IDLE"
-            self.current_host = None
-            if self.user_cancelled:
-                self.error_message = None
-                self.user_cancelled = False
-            elif retcode not in (0, 130, 143):  # 130 is SIGINT, 143 is SIGTERM
-                self.error_message = get_freerdp_error_description(retcode)
-                logger.warning(f"FreeRDP exited with code {retcode}: {self.error_message}")
+            try:
+                if session.log_file and not session.log_file.closed:
+                    session.log_file.write(f"\n--- Sessione RDP [ID: {session.session_id}] terminata con codice {retcode} ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
+                    session.log_file.close()
+            except Exception:
+                pass
+
+            # Only update shared manager state if this session is still the active session!
+            if self.active_session is session:
+                self.active_session = None
+                session.state = "IDLE"
+                if session.user_cancelled:
+                    self.last_error = None
+                elif retcode not in (0, 130, 143):  # 130=SIGINT, 143=SIGTERM
+                    session.error_message = get_freerdp_error_description(retcode)
+                    self.last_error = session.error_message
+                    logger.warning(f"FreeRDP [Session {session.session_id}] exited with code {retcode}: {session.error_message}")
+                else:
+                    self.last_error = None
             else:
-                self.error_message = None
+                logger.info(f"Old session {session.session_id} monitor completed; active session is {getattr(self.active_session, 'session_id', None)}")
 
     def disconnect(self):
-        """Terminates active RDP process and overlay."""
-        self._stop_overlay()
-        try:
-            subprocess.run(["pkill", "-CONT", "-x", "chromium"], check=False)
-        except Exception:
-            pass
+        """Terminates the active RDP session and overlay cleanly."""
         with self.lock:
-            if self.process and self.process.poll() is None:
+            session = self.active_session
+            if session and session.process and session.process.poll() is None:
+                session.user_cancelled = True
+                session.state = "DISCONNECTING"
+                self._stop_overlay(session)
+                coordinate_kiosk_browser("cont")
                 try:
-                    self.user_cancelled = True
-                    self.process.terminate()
-                    time.sleep(0.5)
-                    if self.process.poll() is None:
-                        self.process.kill()
-                    self.state = "IDLE"
-                    self.current_host = None
-                    return True, "Sessione interrotta"
+                    session.process.terminate()
+                    try:
+                        session.process.wait(timeout=1.0)
+                    except subprocess.TimeoutExpired:
+                        session.process.kill()
+                        session.process.wait(timeout=0.5)
                 except Exception as e:
-                    return False, str(e)
+                    logger.warning(f"Error terminating FreeRDP: {e}")
+                self.active_session = None
+                return True, "Sessione interrotta"
             return True, "Nessuna sessione attiva"
 
 rdp_manager = RDPManager()

@@ -15,43 +15,78 @@ xsetroot -solid "#0f172a" &
 # Start Openbox window manager
 openbox &
 
-# Wait for local Thin Client Flask web server to respond
-echo "Waiting for Thin Client web service on http://127.0.0.1:8080..."
-until curl -s http://127.0.0.1:8080/ >/dev/null; do
+# Wait for local Thin Client Flask web server healthz endpoint
+echo "Waiting for Thin Client web service on http://127.0.0.1:8080/healthz..."
+for i in $(seq 1 40); do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 1 http://127.0.0.1:8080/healthz 2>/dev/null || true)
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo "Backend health check succeeded (after ${i} iterations)."
+        break
+    fi
     sleep 0.5
 done
 
+# Resolve Chromium binary (supports chromium or chromium-browser)
+CHROMIUM_BIN=$(command -v chromium || command -v chromium-browser || true)
+if [ -z "$CHROMIUM_BIN" ]; then
+    echo "[xinitrc] ERROR: Neither 'chromium' nor 'chromium-browser' found in PATH." >&2
+fi
+
+# Detect startup mode from settings.yaml
+SETTINGS_FILE="/opt/thinclient/config/settings.yaml"
+[ -f "$SETTINGS_FILE" ] || SETTINGS_FILE="$(cd "$(dirname "$0")/.." && pwd)/config/settings.yaml"
+
+STARTUP_MODE="dashboard"
+if [ -f "$SETTINGS_FILE" ]; then
+    STARTUP_MODE=$(python3 -c "import yaml; d=yaml.safe_load(open('$SETTINGS_FILE')) if open('$SETTINGS_FILE') else {}; print(d.get('startup', {}).get('mode', 'dashboard'))" 2>/dev/null || echo "dashboard")
+fi
+
+# If direct_rdp mode is enabled, run the coordinator first without launching Chromium
+if [ "$STARTUP_MODE" = "direct_rdp" ]; then
+    echo "[xinitrc] Direct-to-RDP mode selected. Starting direct RDP coordinator..."
+    COORDINATOR_SCRIPT="/opt/thinclient/scripts/direct_rdp_coordinator.py"
+    [ -f "$COORDINATOR_SCRIPT" ] || COORDINATOR_SCRIPT="$(cd "$(dirname "$0")" && pwd)/direct_rdp_coordinator.py"
+    if [ -f "$COORDINATOR_SCRIPT" ]; then
+        python3 "$COORDINATOR_SCRIPT" || true
+    fi
+    echo "[xinitrc] Direct RDP finished or returned to menu. Opening Dashboard Kiosk..."
+fi
+
 # Launch Chromium in dedicated kiosk mode with minimal footprint
 while true; do
-    echo "Starting Chromium Kiosk UI..."
-    chromium \
-        --user-data-dir=/tmp/chromium-profile \
-        --disk-cache-dir=/tmp/chromium-cache \
-        --no-sandbox \
-        --kiosk \
-        --incognito \
-        --noerrdialogs \
-        --disable-infobars \
-        --disable-translate \
-        --lang=it \
-        --no-first-run \
-        --disable-features=Translate,TranslateUI,TranslateModel \
-        --disable-sync \
-        --disable-background-networking \
-        --disable-component-update \
-        --disable-component-cloud-policy \
-        --disable-extensions \
-        --disable-notifications \
-        --overscroll-history-navigation=0 \
-        --no-gl-override \
-        --disable-gpu \
-        --disable-gpu-rasterization \
-        --disable-software-rasterizer \
-        --disable-dev-shm-usage \
-        --renderer-process-limit=1 \
-        --disable-speech-api \
-        --disable-breakpad \
-        --disable-crash-reporter \
-        --app=http://127.0.0.1:8080
+    if [ -n "$CHROMIUM_BIN" ]; then
+        echo "Starting Chromium Kiosk UI ($CHROMIUM_BIN)..."
+        "$CHROMIUM_BIN" \
+            --user-data-dir=/tmp/chromium-profile \
+            --disk-cache-dir=/tmp/chromium-cache \
+            --no-sandbox \
+            --kiosk \
+            --incognito \
+            --noerrdialogs \
+            --disable-infobars \
+            --disable-translate \
+            --lang=it \
+            --no-first-run \
+            --disable-features=Translate,TranslateUI,TranslateModel \
+            --disable-sync \
+            --disable-background-networking \
+            --disable-component-update \
+            --disable-component-cloud-policy \
+            --disable-extensions \
+            --disable-notifications \
+            --overscroll-history-navigation=0 \
+            --no-gl-override \
+            --disable-gpu \
+            --disable-gpu-rasterization \
+            --disable-software-rasterizer \
+            --disable-dev-shm-usage \
+            --renderer-process-limit=1 \
+            --disable-speech-api \
+            --disable-breakpad \
+            --disable-crash-reporter \
+            --app=http://127.0.0.1:8080
+    else
+        echo "[xinitrc] Waiting for browser installation..."
+    fi
     sleep 1
 done

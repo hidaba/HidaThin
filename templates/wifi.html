@@ -116,17 +116,43 @@ function scanNetworks() {
             const tr = document.createElement('tr');
             if (net.in_use) tr.className = 'row-active';
 
-            tr.innerHTML = `
-                <td><strong>${escapeHtml(net.ssid)}</strong> ${net.in_use ? '<span class="tag-active">Attiva</span>' : ''}</td>
-                <td>${net.signal}%</td>
-                <td>${escapeHtml(net.security)}</td>
-                <td>
-                    ${net.in_use ? 
-                        `<button class="btn btn-small btn-danger" onclick="forgetNetwork('${escapeHtml(net.ssid)}')">Dimentica</button>` :
-                        `<button class="btn btn-small btn-primary" onclick="openWifiModal('${escapeHtml(net.ssid)}', ${net.is_secure})">Connetti</button>`
-                    }
-                </td>
-            `;
+            // Col 1: SSID
+            const tdSsid = document.createElement('td');
+            const strong = document.createElement('strong');
+            strong.textContent = net.ssid;
+            tdSsid.appendChild(strong);
+            if (net.in_use) {
+                const tag = document.createElement('span');
+                tag.className = 'tag-active';
+                tag.textContent = 'Attiva';
+                tag.style.marginLeft = '8px';
+                tdSsid.appendChild(tag);
+            }
+            tr.appendChild(tdSsid);
+
+            // Col 2: Signal
+            const tdSig = document.createElement('td');
+            tdSig.textContent = `${net.signal}%`;
+            tr.appendChild(tdSig);
+
+            // Col 3: Security
+            const tdSec = document.createElement('td');
+            tdSec.textContent = net.security;
+            tr.appendChild(tdSec);
+
+            // Col 4: Action button
+            const tdAct = document.createElement('td');
+            const btn = document.createElement('button');
+            btn.className = net.in_use ? 'btn btn-small btn-danger' : 'btn btn-small btn-primary';
+            btn.textContent = net.in_use ? 'Dimentica' : 'Connetti';
+            if (net.in_use) {
+                btn.addEventListener('click', () => forgetNetwork(net.ssid));
+            } else {
+                btn.addEventListener('click', () => openWifiModal(net.ssid, net.is_secure));
+            }
+            tdAct.appendChild(btn);
+            tr.appendChild(tdAct);
+
             tableBody.appendChild(tr);
         });
     })

@@ -10,3 +10,14 @@ vnc:
   enabled: true
   port: 5900
   bind_tailscale_only: true
+web_admin:
+  bind: "127.0.0.1"        # 127.0.0.1 (local only) | 0.0.0.0
+  port: 8080
+  remote_enabled: false    # Se true, richiede autenticazione amministrativa
+  admin_token: ""          # Token per API amministrative remote
+startup:
+  mode: "dashboard"        # dashboard | direct_rdp
+  connect_timeout_seconds: 20
+  max_initial_attempts: 1
+  fallback_to_dashboard: true
+

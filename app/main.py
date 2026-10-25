@@ -6,6 +6,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import socket
 import logging
+import time
+import threading
 import yaml
 from flask import Flask, render_template, request, jsonify
 
@@ -14,7 +16,7 @@ from app.wifi import get_network_status, scan_wifi_networks, connect_wifi, forge
 from app.tailscale import get_tailscale_status, restart_tailscale, ping_host
 from app.system import (
     get_settings, save_settings, get_system_metrics, reboot_system, poweroff_system,
-    get_fs_status, remount_fs, start_os_update, get_os_update_status
+    get_fs_status, remount_fs, start_os_update, get_os_update_status, write_secure_yaml
 )
 from app.rdp import rdp_manager
 from app.vnc import get_vnc_status, save_vnc_settings, restart_vnc
@@ -38,41 +40,58 @@ def inject_globals():
         "app_version": __version__
     }
 
-def load_hosts_data():
-    """Reads hosts from config/hosts.yaml."""
+def load_hosts_data(include_passwords=False):
+    """
+    Reads hosts from config/hosts.yaml.
+    By default (include_passwords=False), strips saved passwords and adds 'has_password': True/False.
+    """
+    data = None
     if os.path.exists(HOSTS_FILE):
         try:
             with open(HOSTS_FILE, "r") as f:
-                data = yaml.safe_load(f)
-                if isinstance(data, dict):
-                    return data
+                content = yaml.safe_load(f)
+                if isinstance(content, dict):
+                    data = content
         except Exception as e:
             logger.error(f"Error loading hosts.yaml: {e}")
-    return {
-        "version": 1,
-        "default_host": "pc-mimmo",
-        "hosts": {
-            "pc-mimmo": {"name": "PC Mimmo", "hostname": "pc-mimmo", "ip": "100.64.0.7", "port": 3389},
-            "pc-officina": {"name": "PC Officina", "hostname": "pc-officina", "ip": "100.64.0.9", "port": 3389},
-            "pc-studio": {"name": "PC Studio", "hostname": "pc-studio", "ip": "100.64.0.1", "port": 3389}
+
+    if not data:
+        data = {
+            "version": 1,
+            "default_host": "pc-mimmo",
+            "hosts": {
+                "pc-mimmo": {"name": "PC Mimmo", "hostname": "pc-mimmo", "ip": "100.64.0.7", "port": 3389},
+                "pc-officina": {"name": "PC Officina", "hostname": "pc-officina", "ip": "100.64.0.9", "port": 3389},
+                "pc-studio": {"name": "PC Studio", "hostname": "pc-studio", "ip": "100.64.0.1", "port": 3389}
+            }
         }
+
+    sanitized = {
+        "version": data.get("version", 1),
+        "default_host": data.get("default_host", ""),
+        "hosts": {}
     }
+    for k, v in data.get("hosts", {}).items():
+        host_copy = dict(v)
+        has_pwd = bool(host_copy.get("password"))
+        host_copy["has_password"] = has_pwd
+        if not include_passwords:
+            host_copy.pop("password", None)
+        sanitized["hosts"][k] = host_copy
+
+    return sanitized
 
 def save_hosts_data(data):
-    """Writes hosts to config/hosts.yaml with auto-remount fallback if read-only."""
+    """Writes hosts to config/hosts.yaml with 0600 permissions and auto-remount fallback if read-only."""
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(HOSTS_FILE, "w") as f:
-            yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+        write_secure_yaml(HOSTS_FILE, data)
         return True, "Configurazione salvata con successo"
     except OSError as e:
         if getattr(e, 'errno', None) == 30 or "Read-only file system" in str(e):
             logger.warning("Filesystem is Read-Only. Performing temporary remount RW to save hosts...")
             remount_fs(ro=False)
             try:
-                os.makedirs(CONFIG_DIR, exist_ok=True)
-                with open(HOSTS_FILE, "w") as f:
-                    yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+                write_secure_yaml(HOSTS_FILE, data)
                 return True, "Configurazione salvata con successo"
             finally:
                 remount_fs(ro=True)
@@ -82,11 +101,151 @@ def save_hosts_data(data):
         logger.error(f"Error saving hosts.yaml: {e}")
         return False, str(e)
 
+# --- Security & Access Control Middleware (SEC-01) ---
+
+@app.before_request
+def check_access_control():
+    # Health endpoint is always accessible
+    if request.path == "/healthz":
+        return None
+
+    remote_ip = request.remote_addr or ""
+    is_local = remote_ip in ("127.0.0.1", "::1", "localhost")
+
+    settings = get_settings()
+    web_admin = settings.get("web_admin", {})
+    remote_enabled = bool(web_admin.get("remote_enabled", False))
+    admin_token = (web_admin.get("admin_token") or "").strip()
+
+    if not is_local:
+        if not remote_enabled:
+            logger.warning(f"Rejected remote request from {remote_ip} to {request.path}: remote access disabled.")
+            return jsonify({"success": False, "message": "Accesso remoto non abilitato."}), 403
+
+        # For remote administration, mutating methods require authentication
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            token_header = request.headers.get("X-Admin-Token", "")
+            auth_header = request.headers.get("Authorization", "")
+            provided_token = ""
+            if token_header:
+                provided_token = token_header.strip()
+            elif auth_header.startswith("Bearer "):
+                provided_token = auth_header[7:].strip()
+
+            if not admin_token or provided_token != admin_token:
+                logger.warning(f"Unauthorized remote request from {remote_ip} to {request.path}")
+                return jsonify({"success": False, "message": "Autenticazione richiesta per amministrazione remota."}), 401
+
+    return None
+
+# --- Background System Status Collector (BOOT-02) ---
+
+_system_status_lock = threading.Lock()
+_system_status_cache = None
+_system_status_cache_mono = 0.0
+_is_collecting_status = False
+SYSTEM_STATUS_CACHE_TTL = 5.0
+
+def get_system_boot_id():
+    """Reads Linux kernel boot_id, guaranteed unique on every reboot."""
+    try:
+        with open("/proc/sys/kernel/random/boot_id", "r") as f:
+            return f.read().strip()
+    except Exception:
+        return "boot-static"
+
+def _refresh_system_status():
+    global _system_status_cache, _system_status_cache_mono, _is_collecting_status
+    try:
+        net = get_network_status(force=False)
+        ts = get_tailscale_status(force=False)
+        vnc = get_vnc_status()
+
+        data = load_hosts_data(include_passwords=False)
+        default_key = data.get("default_host")
+        host_info = data.get("hosts", {}).get(default_key, {})
+
+        host_reachable = None
+        if ts.get("connected") and host_info:
+            target = host_info.get("hostname")
+            fallback_target = host_info.get("ip")
+            port = int(host_info.get("port", 3389))
+            
+            for candidate in filter(None, [target, fallback_target]):
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.8)
+                    s.connect((candidate, port))
+                    s.close()
+                    host_reachable = True
+                    break
+                except Exception:
+                    host_reachable = False
+
+        status_snapshot = {
+            "version": __version__,
+            "boot_id": get_system_boot_id(),
+            "network": net,
+            "tailscale": ts,
+            "vnc": vnc,
+            "default_host": {
+                "key": default_key,
+                "name": host_info.get("name") if host_info else None,
+                "target": (host_info.get("hostname") or host_info.get("ip")) if host_info else None,
+                "reachable": host_reachable
+            },
+            "timestamp_mono": time.monotonic()
+        }
+
+        with _system_status_lock:
+            _system_status_cache = status_snapshot
+            _system_status_cache_mono = time.monotonic()
+    except Exception as e:
+        logger.error(f"Error in background status collection: {e}")
+    finally:
+        with _system_status_lock:
+            _is_collecting_status = False
+
+def get_cached_system_status(force=False):
+    """
+    Returns a cached snapshot of network, Tailscale, VNC, and default host status.
+    Spawns at most one background worker when cache expires, ensuring non-blocking fast response.
+    """
+    global _is_collecting_status
+    now = time.monotonic()
+    with _system_status_lock:
+        cache_valid = (_system_status_cache is not None and (now - _system_status_cache_mono) < SYSTEM_STATUS_CACHE_TTL)
+        if (not force and cache_valid) or _is_collecting_status:
+            if _system_status_cache is not None:
+                return dict(_system_status_cache)
+
+        if not _is_collecting_status:
+            _is_collecting_status = True
+            threading.Thread(target=_refresh_system_status, daemon=True).start()
+
+        if _system_status_cache is not None:
+            return dict(_system_status_cache)
+
+    _refresh_system_status()
+    with _system_status_lock:
+        return dict(_system_status_cache) if _system_status_cache else {}
+
+# --- Lightweight Health Endpoint (BOOT-02) ---
+
+@app.route("/healthz")
+def healthz():
+    """Ultra-lightweight local health check; never performs external network or DNS queries."""
+    return jsonify({
+        "status": "ok",
+        "version": __version__,
+        "timestamp": time.time()
+    }), 200
+
 # --- Web UI Routes ---
 
 @app.route("/")
 def index():
-    data = load_hosts_data()
+    data = load_hosts_data(include_passwords=False)
     return render_template(
         "index.html",
         hosts=data.get("hosts", {}),
@@ -99,7 +258,7 @@ def wifi_page():
 
 @app.route("/hosts")
 def hosts_page():
-    data = load_hosts_data()
+    data = load_hosts_data(include_passwords=False)
     return render_template(
         "hosts.html",
         hosts=data.get("hosts", {}),
@@ -119,7 +278,7 @@ def diagnostics_page():
     net = get_network_status()
     ts = get_tailscale_status()
     metrics = get_system_metrics()
-    data = load_hosts_data()
+    data = load_hosts_data(include_passwords=False)
     vnc = get_vnc_status()
     fs = get_fs_status()
     return render_template(
@@ -137,60 +296,19 @@ def diagnostics_page():
 @app.route("/api/status")
 def api_status():
     force = request.args.get("force", "false").lower() in ("true", "1")
-    net = get_network_status(force=force)
-    ts = get_tailscale_status(force=force)
-    vnc = get_vnc_status()
+    cached = get_cached_system_status(force=force)
     return jsonify({
         "version": __version__,
-        "network": net,
-        "tailscale": ts,
-        "vnc": vnc
+        "network": cached.get("network", {}),
+        "tailscale": cached.get("tailscale", {}),
+        "vnc": cached.get("vnc", {})
     })
-
-def get_system_boot_id():
-    """Reads Linux kernel boot_id, guaranteed unique on every reboot."""
-    try:
-        with open("/proc/sys/kernel/random/boot_id", "r") as f:
-            return f.read().strip()
-    except Exception:
-        return "boot-static"
 
 @app.route("/api/boot/status")
 def api_boot_status():
     force = request.args.get("force", "true").lower() in ("true", "1")
-    net = get_network_status(force=force)
-    ts = get_tailscale_status(force=force)
-    data = load_hosts_data()
-    default_key = data.get("default_host")
-    host_info = data.get("hosts", {}).get(default_key, {})
-
-    # Quick check for default host reachability if tailscale is connected
-    host_reachable = None
-    if ts.get("connected") and host_info:
-        target = host_info.get("hostname") or host_info.get("ip")
-        if target:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.5)
-                port = int(host_info.get("port", 3389))
-                s.connect((target, port))
-                s.close()
-                host_reachable = True
-            except Exception:
-                host_reachable = False
-
-    return jsonify({
-        "version": __version__,
-        "boot_id": get_system_boot_id(),
-        "network": net,
-        "tailscale": ts,
-        "default_host": {
-            "key": default_key,
-            "name": host_info.get("name") if host_info else None,
-            "target": (host_info.get("hostname") or host_info.get("ip")) if host_info else None,
-            "reachable": host_reachable
-        }
-    })
+    cached = get_cached_system_status(force=force)
+    return jsonify(cached)
 
 @app.route("/api/rdp/connect", methods=["POST"])
 def api_rdp_connect():
@@ -200,52 +318,44 @@ def api_rdp_connect():
     password = req.get("password")
     save_password = req.get("save_password")
 
-    data = load_hosts_data()
-    hosts = data.get("hosts", {})
+    raw_data = load_hosts_data(include_passwords=True)
+    hosts = raw_data.get("hosts", {})
     if host_key not in hosts:
         return jsonify({"success": False, "message": f"Host '{host_key}' non trovato"}), 404
 
     host_entry = hosts[host_key]
-    
+    stored_password = host_entry.get("password")
+
     # Check Tailscale readiness
     ts_status = get_tailscale_status()
     if not ts_status.get("connected"):
-        # Try restarting tailscale once
         restart_tailscale()
-        ts_status = get_tailscale_status()
+        ts_status = get_tailscale_status(force=True)
         if not ts_status.get("connected"):
             return jsonify({
                 "success": False,
                 "message": "Connessione Tailscale non disponibile. Verifica lo stato di rete."
             })
 
-    # Persist or remove credentials according to save_password flag
-    if save_password is True:
-        changed = False
-        if password is not None:
-            if password != "":
-                if host_entry.get("password") != password:
-                    host_entry["password"] = password
-                    changed = True
-            elif "password" in host_entry:
-                del host_entry["password"]
-                changed = True
-        if username is not None:
-            u_clean = username.strip()
-            if u_clean and host_entry.get("username") != u_clean:
-                host_entry["username"] = u_clean
-                changed = True
-            elif not u_clean and "username" in host_entry:
-                del host_entry["username"]
-                changed = True
-        if changed:
-            save_hosts_data(data)
-    elif save_password is False:
-        if "password" in host_entry:
-            del host_entry["password"]
-            save_hosts_data(data)
+    # Password semantics:
+    effective_password = None
+    if password is not None and password != "":
+        effective_password = password
+        if save_password is True:
+            host_entry["password"] = password
+            if username is not None:
+                u_clean = username.strip()
+                if u_clean:
+                    host_entry["username"] = u_clean
+            save_hosts_data(raw_data)
+        # If save_password is False, it's a transient password: do NOT touch stored credential
+    else:
+        # Use stored password
+        effective_password = stored_password
 
-    success, msg = rdp_manager.connect(host_entry, username=username, password=password)
+    effective_user = username if (username is not None and username != "") else host_entry.get("username")
+
+    success, msg = rdp_manager.connect(host_entry, username=effective_user, password=effective_password)
     return jsonify({"success": success, "message": msg})
 
 @app.route("/api/rdp/disconnect", methods=["POST"])
@@ -297,34 +407,37 @@ def api_hosts_save():
     port = req.get("port", 3389)
     username = (req.get("username") or "").strip()
     password = req.get("password")
+    clear_password = req.get("clear_password", False)
     is_default = req.get("is_default", False)
 
     if not key or not name or not hostname:
         return jsonify({"success": False, "message": "Dati incompleti"}), 400
 
-    data = load_hosts_data()
-    existing_entry = data.get("hosts", {}).get(key, {})
+    raw_data = load_hosts_data(include_passwords=True)
+    existing_entry = raw_data.get("hosts", {}).get(key, {})
+
     host_entry = {
         "name": name,
         "hostname": hostname,
         "ip": ip if ip else None,
-        "port": port
+        "port": int(port) if port else 3389
     }
     if username:
         host_entry["username"] = username
-    if password is not None:
-        if password:
-            host_entry["password"] = password
-        elif "password" in existing_entry and password == "":
-            pass # explicitly cleared
+
+    # Password preservation & modification semantics
+    if clear_password:
+        pass  # Explicit removal: omitted from host_entry
+    elif password is not None and password != "":
+        host_entry["password"] = password  # Explicit replacement
     elif "password" in existing_entry:
-        host_entry["password"] = existing_entry["password"]
+        host_entry["password"] = existing_entry["password"]  # Preserve existing
 
-    data.setdefault("hosts", {})[key] = host_entry
+    raw_data.setdefault("hosts", {})[key] = host_entry
     if is_default:
-        data["default_host"] = key
+        raw_data["default_host"] = key
 
-    success, msg = save_hosts_data(data)
+    success, msg = save_hosts_data(raw_data)
     return jsonify({"success": success, "message": msg})
 
 @app.route("/api/hosts/delete", methods=["POST"])
@@ -334,13 +447,13 @@ def api_hosts_delete():
     if not key:
         return jsonify({"success": False, "message": "Chiave host mancante"}), 400
 
-    data = load_hosts_data()
-    hosts = data.get("hosts", {})
+    raw_data = load_hosts_data(include_passwords=True)
+    hosts = raw_data.get("hosts", {})
     if key in hosts:
         del hosts[key]
-        if data.get("default_host") == key:
-            data["default_host"] = next(iter(hosts.keys()), "")
-        success, msg = save_hosts_data(data)
+        if raw_data.get("default_host") == key:
+            raw_data["default_host"] = next(iter(hosts.keys()), "")
+        success, msg = save_hosts_data(raw_data)
         return jsonify({"success": success, "message": msg})
     return jsonify({"success": False, "message": "Host non trovato"}), 404
 
@@ -348,10 +461,10 @@ def api_hosts_delete():
 def api_hosts_set_default():
     req = request.get_json() or {}
     key = req.get("key")
-    data = load_hosts_data()
-    if key in data.get("hosts", {}):
-        data["default_host"] = key
-        success, msg = save_hosts_data(data)
+    raw_data = load_hosts_data(include_passwords=True)
+    if key in raw_data.get("hosts", {}):
+        raw_data["default_host"] = key
+        success, msg = save_hosts_data(raw_data)
         return jsonify({"success": success, "message": msg})
     return jsonify({"success": False, "message": "Host non trovato"}), 404
 
@@ -402,7 +515,8 @@ def api_tailscale_ping():
     host = request.args.get("host", "")
     if not host:
         return jsonify({"success": False, "message": "Host non specificato"}), 400
-    success, msg = ping_host(host)
+    fallback_ip = request.args.get("ip")
+    success, msg = ping_host(host, fallback_ip=fallback_ip)
     return jsonify({"success": success, "message": msg})
 
 @app.route("/api/diagnostics/test-host")
@@ -417,20 +531,21 @@ def api_diagnostics_test_host():
     except Exception:
         pass
 
-    # Ping test
-    ping_ok, ping_out = ping_host(host)
+    fallback_ip = request.args.get("ip")
+    ping_ok, ping_out = ping_host(host, fallback_ip=fallback_ip)
 
-    # Port 3389 test
     port_open = False
-    try:
-        s = socket.socket()
-        s.settimeout(2.5)
-        target = resolved_ip or host
-        res = s.connect_ex((target, 3389))
-        port_open = (res == 0)
-        s.close()
-    except Exception:
-        pass
+    for target in filter(None, [resolved_ip, host, fallback_ip]):
+        try:
+            s = socket.socket()
+            s.settimeout(1.5)
+            res = s.connect_ex((target, 3389))
+            s.close()
+            if res == 0:
+                port_open = True
+                break
+        except Exception:
+            pass
 
     return jsonify({
         "host": host,
@@ -452,7 +567,8 @@ def api_vnc_save():
     enabled = req.get("enabled", True)
     bind_tailscale_only = req.get("bind_tailscale_only", True)
     password = req.get("password")
-    success, msg = save_vnc_settings(enabled, bind_tailscale_only, password)
+    port = req.get("port")
+    success, msg = save_vnc_settings(enabled, bind_tailscale_only, password, port=port)
     return jsonify({"success": success, "message": msg})
 
 @app.route("/api/vnc/restart", methods=["POST"])
@@ -465,11 +581,21 @@ def api_vnc_restart():
 @app.route("/api/overlay/test", methods=["POST"])
 def api_overlay_test():
     try:
-        rdp_manager._start_overlay("PC Test (Diagnostica)")
+        data = load_hosts_data(include_passwords=False)
+        default_host = data.get("hosts", {}).get(data.get("default_host"), {})
+        host_name = default_host.get("name", "PC Test (Diagnostica)")
+        # create a dummy session object for test
+        from app.rdp import RDPSession
+        dummy = RDPSession(9999, default_host, "test", "127.0.0.1")
+        rdp_manager._start_overlay(dummy)
         return jsonify({"success": True, "message": "Overlay OSD avviato nell'angolo in alto a sinistra. Porta il mouse in alto a sinistra per 1s per aprirlo."})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=False)
-
+    settings = get_settings()
+    web_conf = settings.get("web_admin", {})
+    bind_ip = web_conf.get("bind", "127.0.0.1")
+    port = int(web_conf.get("port", 8080))
+    logger.info(f"Starting HidaThin backend on {bind_ip}:{port} (remote_enabled={web_conf.get('remote_enabled', False)})")
+    app.run(host=bind_ip, port=port, debug=False)
