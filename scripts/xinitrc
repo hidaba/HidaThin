@@ -25,6 +25,8 @@ done
 while true; do
     echo "Starting Chromium Kiosk UI..."
     chromium \
+        --user-data-dir=/tmp/chromium-profile \
+        --disk-cache-dir=/tmp/chromium-cache \
         --no-sandbox \
         --kiosk \
         --incognito \

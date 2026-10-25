@@ -146,13 +146,18 @@ add_tmpfs_entry "/var/log" "defaults,noatime,nosuid,mode=0755,size=64m"
 add_tmpfs_entry "/var/spool" "defaults,noatime,nosuid,size=32m"
 
 # 7. Configure systemd journald and services for Read-Only
-echo "[7/8] Configurazione systemd-journald volatile in RAM..."
+echo "[7/8] Configurazione systemd-journald e disabilitazione swap su disco..."
 mkdir -p /etc/systemd/journald.conf.d/
 cat << 'EOF' > /etc/systemd/journald.conf.d/readonly.conf
 [Journal]
 Storage=volatile
 RuntimeMaxUse=32M
 EOF
+
+# Disable SD-card swap services (zram handles swap in RAM)
+systemctl mask rpi-resize-swap-file.service 2>/dev/null || true
+systemctl mask rpi-setup-loop@var-swap.service 2>/dev/null || true
+systemctl mask dphys-swapfile.service 2>/dev/null || true
 
 # Symlink random-seed to tmpfs to avoid boot error on RO root
 if [ -f /var/lib/systemd/random-seed ]; then
