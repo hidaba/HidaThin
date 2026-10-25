@@ -165,6 +165,13 @@ echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.d/99-swappiness.conf
 sudo sysctl -p /etc/sysctl.d/99-swappiness.conf
 ```
 
+#### F. Fast Boot: Aggressive Systemd Pruning & Masking
+Disable blocking background services, update timers, and non-essential hardware polling daemons (saves ~3-4s of boot time and eliminates MicroSD I/O congestion):
+```bash
+sudo bash /opt/thinclient/scripts/optimize-boot.sh
+```
+*(To revert at any time: `sudo bash /opt/thinclient/scripts/optimize-boot.sh --undo`)*
+
 ### 5. Configuration & Passwords
 
 Edit `/opt/thinclient/config/hosts.yaml` to specify your target Windows machines:

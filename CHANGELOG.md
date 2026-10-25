@@ -5,6 +5,17 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.13] - 2026-10-25
+
+### Ottimizzazione e Boot Speed
+- **Script di Pruning & Masking Aggressivo dei Servizi Systemd (`scripts/optimize-boot.sh`)**:
+  - Creato script automatizzato per disabilitare e mascherare tutti i demoni in background e timer non necessari per un thin client dedicato (risparmio di ~2-4s di tempo di avvio e abbattimento dei colli di bottiglia di I/O su MicroSD).
+  - Mascherati timer periodici pesanti: `apt-daily.timer`, `apt-daily-upgrade.timer`, `man-db.timer`, `e2scrub_all.timer`, `logrotate.timer`.
+  - Disabilitati demoni non utilizzati: `cups` (stampa locale), `avahi-daemon` (mDNS ridondante con Tailscale MagicDNS), `ModemManager`, `triggerhappy` (tasti multimediali), `plymouth` (splash generico non necessario con kiosk X11 diretto), `bluetooth` e `hciuart`.
+  - Disabilitate le sincronizzazioni bloccanti al boot: `systemd-udev-settle.service` e `systemd-time-wait-sync.service` per evitare stalli nell'avvio della sessione grafica.
+  - Aggiunto parametro `--undo` per il ripristino immediato dei servizi all'occorrenza.
+  - Documentata procedura di esecuzione in [README.md](file:///y:/Progetti/thinclient/README.md) e tracciata la roadmap in [TODO.md](file:///y:/Progetti/thinclient/TODO.md).
+
 ## [0.2.12] - 2026-10-25
 
 ### Risolto e Ottimizzato

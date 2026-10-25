@@ -34,7 +34,6 @@ if [ ! -f "$PASS_FILE" ]; then
 fi
 
 # 3. Base performance arguments for Raspberry Pi 3:
-# -auth guess: automatically discovers Xauthority for root/user session
 # -forever: keep listening across disconnects
 # -shared: allows reconnection without killing current session
 # -repeat: smooth keyboard repeat handling
@@ -42,7 +41,6 @@ fi
 # -wait 50 -defer 40: throttles polling & batches frame updates to keep CPU <10%
 ARGS=(
     -display :0
-    -auth guess
     -forever
     -shared
     -rfbport 5900
@@ -51,6 +49,13 @@ ARGS=(
     -wait 50
     -defer 40
 )
+
+# Detect Xauthority file if present (root kiosk without display manager runs directly on :0)
+if [ -f "/root/.Xauthority" ]; then
+    ARGS+=(-auth "/root/.Xauthority")
+elif [ -n "$XAUTHORITY" ] && [ -f "$XAUTHORITY" ]; then
+    ARGS+=(-auth "$XAUTHORITY")
+fi
 
 if [ -f "$PASS_FILE" ]; then
     ARGS+=(-rfbauth "$PASS_FILE")
@@ -81,9 +86,11 @@ if [ "$BIND_TS" = "true" ] || [ "$BIND_TS" = "True" ]; then
     if [ -n "$TS_IP" ]; then
         echo "[x11vnc-start] Binding strictly to Tailscale IP: $TS_IP"
         ARGS+=(-listen "$TS_IP")
-    else
+    elif ip link show tailscale0 >/dev/null 2>&1; then
         echo "[x11vnc-start] Tailscale IP not yet available, falling back to interface tailscale0"
         ARGS+=(-interface tailscale0)
+    else
+        echo "[x11vnc-start] Warning: Tailscale not available or interface missing. Binding to 0.0.0.0 fallback."
     fi
 else
     echo "[x11vnc-start] Binding to all network interfaces (0.0.0.0:5900)"
