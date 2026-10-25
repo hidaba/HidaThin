@@ -20,6 +20,15 @@ e questo progetto segue il versionamento `0.2.x`.
 - **Regola di Sviluppo in `GEMINI.md`**:
   - Registrata la regola vincolante di manutenzione per garantire che `install.sh` sia sempre tenuto aggiornato ad ogni modifica che coinvolge aggiunta, rimozione o variazione di file o dipendenze nel repository.
 
+### Risolto e Perfezionato (Boot Read-Only)
+- **Eliminazione Errori di Swap su Root Read-Only (`scripts/setup-readonly-fs.sh`)**:
+  - Rimozione preventiva del file `/var/swap` prima del mount RO e configurazione di `Mechanism=zram` in `/etc/rpi/swap.conf`.
+  - Mascherati i servizi di ridimensionamento swap su MicroSD (`rpi-resize-swap-file`, `rpi-remove-swap-file@`, `rpi-setup-loop@var-swap`, `dphys-swapfile`) per evitare blocchi e messaggi di errore durante il boot.
+- **Avvio Pulito Chromium & Xorg su Filesystem Read-Only (`scripts/xinitrc`, `systemd/thinclient-ui.service`)**:
+  - Reindirizzati i parametri `--user-data-dir` e `--disk-cache-dir` di Chromium su directory volatili in `/tmp` (tmpfs).
+  - Reindirizzato il log del server grafico Xorg su `/tmp/Xorg.0.log` per eliminare tentativi di scrittura su `/var/log`.
+
+
 
 ## [0.2.14] - 2026-10-25
 

@@ -1,5 +1,6 @@
 # HidaThin — High-Performance Raspberry Pi Thin Client for RDP via Tailscale
 
+[![Latest Release](https://img.shields.io/github/v/release/hidaba/HidaThin?color=blue&label=Release&logo=github)](https://github.com/hidaba/HidaThin/releases)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi%203%20%7C%204%20%7C%205-C51A4A.svg?logo=raspberry-pi&logoColor=white)](https://www.raspberrypi.com/)
 [![OS](https://img.shields.io/badge/OS-Raspberry%20Pi%20OS%20Lite-A22846.svg?logo=debian&logoColor=white)](https://www.raspberrypi.com/software/)
