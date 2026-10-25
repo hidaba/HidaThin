@@ -1,0 +1,22 @@
+version: 1
+default_host: pc-mimmo
+
+hosts:
+  pc-mimmo:
+    name: "PC Mimmo"
+    hostname: "pc-mimmo"
+    ip: "100.64.0.7"
+    port: 3389
+
+  pc-officina:
+    name: "PC Officina"
+    hostname: "pc-officina"
+    ip: "100.64.0.9"
+    port: 3389
+    username: "hidab"
+
+  pc-studio:
+    name: "PC Studio"
+    hostname: "pc-studio"
+    ip: "100.64.0.1"
+    port: 3389

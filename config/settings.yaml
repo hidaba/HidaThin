@@ -1,0 +1,12 @@
+version: 1
+profile: "balanced"       # performance | balanced | quality
+resolution: "auto"        # auto | 1920x1080 | 1600x900 | 1280x720
+color_depth: 24           # 16 | 24 | 32
+sound: true               # true | false
+auto_reconnect: true      # true | false
+max_reconnect_retries: 3
+fullscreen: true
+vnc:
+  enabled: true
+  port: 5900
+  bind_tailscale_only: true

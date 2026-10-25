@@ -1,0 +1,20 @@
+[Unit]
+Description=Thin Client RDP Graphical Kiosk UI
+After=thinclient.service
+Wants=thinclient.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=root
+PAMName=login
+Environment=HOME=/root
+WorkingDirectory=/opt/thinclient
+ExecStart=/usr/bin/xinit /opt/thinclient/scripts/xinitrc -- :0 vt1 -s 0 -dpms
+Restart=always
+RestartSec=2
+StandardInput=tty
+TTYPath=/dev/tty1
+
+[Install]
+WantedBy=multi-user.target

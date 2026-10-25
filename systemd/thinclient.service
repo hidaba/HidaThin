@@ -1,0 +1,17 @@
+[Unit]
+Description=Thin Client RDP Web & API Service
+After=basic.target
+Wants=basic.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/thinclient
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/thinclient
+ExecStart=/usr/bin/python3 /opt/thinclient/app/main.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

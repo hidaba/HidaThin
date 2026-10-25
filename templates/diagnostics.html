@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="screen-center">
+    <div class="card card-wide">
+        <div class="card-header-bar">
+            <h2>Diagnostica di Sistema</h2>
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-secondary" onclick="testOverlay()">▶ Testa Overlay OSD</button>
+                <button class="btn btn-secondary" onclick="sessionStorage.removeItem('hidathin_boot_id'); window.location.href='/';">▶ Simula Splash Boot</button>
+                <button class="btn btn-secondary" onclick="window.location.reload()">↻ Aggiorna Dati</button>
+            </div>
+        </div>
+
+        <div class="diag-grid">
+            <div class="diag-section">
+                <h3>Rete Locale (LAN / Wi-Fi)</h3>
+                <table class="diag-table">
+                    <tr><td>Interfaccia primaria:</td><td><strong>{{ network.wifi.interface if network.wifi.connected else network.ethernet.interface }}</strong></td></tr>
+                    <tr><td>SSID Wi-Fi:</td><td><strong>{{ network.wifi.ssid or 'Disconnesso' }}</strong></td></tr>
+                    <tr><td>Potenza Segnale:</td><td><strong>{{ network.wifi.signal }}%</strong></td></tr>
+                    <tr><td>IP LAN:</td><td><strong>{{ network.primary_ip or '--' }}</strong></td></tr>
+                    <tr><td>Gateway Predefinito:</td><td><strong>{{ network.default_gateway or '--' }}</strong></td></tr>
+                </table>
+            </div>
+
+            <div class="diag-section">
+                <h3>Tailscale</h3>
+                <table class="diag-table">
+                    <tr><td>Stato Tailscale:</td><td><strong>{{ 'CONNESSO' if tailscale.connected else 'NON CONNESSO' }}</strong></td></tr>
+                    <tr><td>IP Tailscale IPv4:</td><td><strong>{{ tailscale.ip or '--' }}</strong></td></tr>
+                    <tr><td>MagicDNS Suffix:</td><td><strong>{{ tailscale.magic_dns_suffix or '--' }}</strong></td></tr>
+                    <tr><td>Nodi attivi nella rete:</td><td><strong>{{ tailscale.peers|length }} computer rilevati</strong></td></tr>
+                </table>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-small btn-secondary" onclick="restartTailscaleService()">Riavvia Servizio Tailscale</button>
+                </div>
+            </div>
+
+            <div class="diag-section">
+                <h3>Hardware Raspberry Pi 3</h3>
+                <table class="diag-table">
+                    <tr><td>RAM Totale:</td><td><strong>{{ metrics.ram_total }} MB</strong></td></tr>
+                    <tr><td>RAM Utilizzata:</td><td><strong>{{ metrics.ram_used }} MB ({{ metrics.ram_percent }}%)</strong></td></tr>
+                    <tr><td>RAM Libera / Disponibile:</td><td><strong>{{ metrics.ram_free }} MB</strong></td></tr>
+                    <tr><td>Swap Utilizzato:</td><td><strong>{{ metrics.swap_used }} / {{ metrics.swap_total }} MB</strong></td></tr>
+                    <tr><td>Temperatura CPU:</td><td><strong>{{ metrics.temp }}</strong></td></tr>
+                    <tr><td>Stato Throttling:</td><td><strong>{{ metrics.throttled.description }} ({{ metrics.throttled.raw }})</strong></td></tr>
+                    <tr><td>Risoluzione Monitor:</td><td><strong>{{ metrics.resolution }}</strong></td></tr>
+                </table>
+            </div>
+
+            <div class="diag-section">
+                <h3>Verifica Connettività PC Remoto</h3>
+                <div style="display:flex; gap:10px; margin-bottom: 10px;">
+                    <select id="diag-host-selector" class="input-text" style="flex:1;">
+                        {% for key, host in hosts.items() %}
+                        <option value="{{ host.hostname }}">{{ host.name }} ({{ host.hostname }})</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-primary" onclick="runHostDiagnostics()">Esegui Test</button>
+                </div>
+                <div id="diag-host-result" class="diag-host-box">
+                    Seleziona un host e premi "Esegui Test" per verificare Ping MagicDNS e porta TCP 3389.
+                </div>
+            </div>
+
+            <div class="diag-section">
+                <h3>Supervisione Remota (VNC)</h3>
+                <table class="diag-table">
+                    <tr><td>Stato Servizio:</td><td><strong style="color: {% if vnc.active %}#4ade80{% else %}#f87171{% endif %};">{{ 'ATTIVO (In ascolto)' if vnc.active else 'NON ATTIVO' }}</strong></td></tr>
+                    <tr><td>Porta VNC:</td><td><strong>{{ vnc.port }}/TCP</strong></td></tr>
+                    <tr><td>Modalità Ascolto:</td><td><strong>{{ 'Esclusiva VPN Tailscale' if vnc.bind_tailscale_only else 'Tutte le interfacce (0.0.0.0)' }}</strong></td></tr>
+                    <tr><td>Endpoint VNC:</td><td style="font-family: monospace;"><strong>{{ vnc.connect_host }}</strong></td></tr>
+                    <tr><td>IP Connessione:</td><td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_ip or '--' }}</strong></td></tr>
+                    <tr><td>Client Connessi:</td><td><strong style="color: {% if vnc.clients_count > 0 %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ vnc.clients_count }} attivi {% if vnc.clients %}({{ vnc.clients|join(', ') }}){% endif %}</strong></td></tr>
+                </table>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-small btn-secondary" onclick="restartVncService()">Riavvia Servizio VNC</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 25px; display: flex; justify-content: space-between;">
+            <a href="/" class="btn btn-secondary">◄ Torna al Menu Principale</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testOverlay() {
+    showModal("Overlay OSD", "Avvio overlay in corso...");
+    fetch('/api/overlay/test', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+        showModal("Overlay OSD", data.message);
+    })
+    .catch(err => {
+        showModal("Errore", "Impossibile avviare overlay: " + err);
+    });
+}
+
+function restartTailscaleService() {
+    if (confirm("Vuoi riavviare il servizio tailscaled?")) {
+        showModal("Tailscale", "Riavvio di tailscaled in corso...");
+        fetch('/api/tailscale/restart', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            showModal("Tailscale", data.message);
+            setTimeout(() => window.location.reload(), 2000);
+        });
+    }
+}
+
+function restartVncService() {
+    if (confirm("Vuoi riavviare il servizio thinclient-vnc?")) {
+        showModal("VNC", "Riavvio del servizio VNC in corso...");
+        fetch('/api/vnc/restart', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            showModal("VNC", data.message);
+            setTimeout(() => window.location.reload(), 2000);
+        });
+    }
+}
+
+function runHostDiagnostics() {
+    const host = document.getElementById('diag-host-selector').value;
+    const resBox = document.getElementById('diag-host-result');
+    resBox.innerHTML = `<em>Verifica in corso verso <strong>${host}</strong>...</em>`;
+
+    fetch(`/api/diagnostics/test-host?host=${encodeURIComponent(host)}`)
+    .then(r => r.json())
+    .then(data => {
+        resBox.innerHTML = `
+            <div><strong>Risoluzione DNS:</strong> ${data.resolved_ip || 'Non risolto'}</div>
+            <div><strong>Ping Tailscale:</strong> ${data.ping_success ? 'OK (Raggiungibile)' : 'Fallito'}</div>
+            <div><strong>Porta TCP 3389 (RDP):</strong> <span style="color: ${data.port_open ? '#4ade80' : '#f87171'}">${data.port_open ? 'APERTA' : 'CHIUSA / Non raggiungibile'}</span></div>
+        `;
+    })
+    .catch(() => {
+        resBox.innerHTML = `<span style="color: #f87171">Errore durante l'esecuzione del test.</span>`;
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,485 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="boot-splash" class="boot-splash-overlay">
+    <div class="boot-splash-card cyber-card">
+        <div class="cyber-hero-banner">
+            <img src="/static/img/cyberpunk_splash.jpg" alt="HiDaThin Cyberpunk Core" class="cyber-hero-img">
+            <div class="cyber-scanlines"></div>
+            <div class="cyber-hero-overlay">
+                <div class="cyber-logo-badge">HiDaThin</div>
+                <div class="cyber-tagline">// NEURAL THIN CLIENT OS • RDP VIA TAILSCALE //</div>
+            </div>
+        </div>
+
+        <div class="boot-progress-wrapper cyber-progress-wrap">
+            <div class="boot-progress-header">
+                <span id="boot-progress-label" class="cyber-label">INIZIALIZZAZIONE SISTEMA...</span>
+                <span id="boot-progress-percent" class="cyber-percent">25%</span>
+            </div>
+            <div class="boot-progress-bar cyber-bar">
+                <div id="boot-progress-fill" class="boot-progress-fill cyber-fill" style="width: 25%;"></div>
+            </div>
+        </div>
+
+        <div class="boot-checklist cyber-checklist">
+            <div class="boot-check-item item-success cyber-item" id="boot-step-system">
+                <div class="boot-check-icon icon-success cyber-icon">✔</div>
+                <div class="boot-check-text">
+                    <div class="boot-check-title">[01/04] MOTORE KIOSK HIDATHIN</div>
+                    <div class="boot-check-sub" id="boot-step-system-sub">Server Flask e display X11 operativi</div>
+                </div>
+            </div>
+
+            <div class="boot-check-item item-active cyber-item" id="boot-step-network">
+                <div class="boot-check-icon icon-pending cyber-icon" id="icon-network-status">
+                    <div class="mini-spinner cyber-spinner"></div>
+                </div>
+                <div class="boot-check-text">
+                    <div class="boot-check-title">[02/04] CONNESSIONE DI RETE (WI-FI / ETH)</div>
+                    <div class="boot-check-sub" id="boot-step-network-sub">Collegamento in corso...</div>
+                </div>
+            </div>
+
+            <div class="boot-check-item cyber-item" id="boot-step-tailscale">
+                <div class="boot-check-icon icon-pending cyber-icon" id="icon-ts-status">
+                    <div class="mini-spinner cyber-spinner"></div>
+                </div>
+                <div class="boot-check-text">
+                    <div class="boot-check-title">[03/04] TUNNEL VPN TAILSCALE WIREGUARD</div>
+                    <div class="boot-check-sub" id="boot-step-tailscale-sub">In attesa della rete locale...</div>
+                </div>
+            </div>
+
+            <div class="boot-check-item cyber-item" id="boot-step-rdp">
+                <div class="boot-check-icon icon-pending cyber-icon" id="icon-rdp-status">
+                    <div class="mini-spinner cyber-spinner"></div>
+                </div>
+                <div class="boot-check-text">
+                    <div class="boot-check-title">[04/04] VERIFICA HOST RDP REMOTO</div>
+                    <div class="boot-check-sub" id="boot-step-rdp-sub">In attesa del tunnel crittografato...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="boot-fallback-actions" class="boot-fallback-actions cyber-fallback" style="display: none;">
+            <a href="/wifi" class="btn btn-primary cyber-btn">Configura Wi-Fi</a>
+            <button type="button" class="btn btn-secondary cyber-btn-secondary" onclick="dismissBootSplash()">Dashboard HiDaThin</button>
+        </div>
+    </div>
+</div>
+
+<div class="screen-center">
+    <div class="card card-main">
+        <div class="card-status-grid">
+            <div class="status-col">
+                <div class="status-label">Stato Wi-Fi</div>
+                <div class="status-val" id="card-wifi-val">--</div>
+                <div class="status-sub" id="card-wifi-sub">IP: --</div>
+            </div>
+            <div class="status-col">
+                <div class="status-label">Stato Tailscale</div>
+                <div class="status-val" id="card-ts-val">--</div>
+                <div class="status-sub" id="card-ts-sub">IP: --</div>
+            </div>
+        </div>
+
+        <div class="selector-box">
+            <label for="host-selector" class="selector-label">Seleziona Computer Remoto:</label>
+            <select id="host-selector" class="selector-dropdown" onchange="onHostSelected()" autofocus>
+                {% for key, host in hosts.items() %}
+                <option value="{{ key }}" data-username="{{ host.username or '' }}" data-password="{{ host.password or '' }}" {% if key == default_host %}selected{% endif %}>
+                    {{ host.name }} ({{ host.hostname }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="credentials-toggle">
+            <button type="button" id="btn-toggle-cred" class="btn-link" onclick="toggleCredentials()">
+                Opzioni accesso Windows (opzionale) ▼
+            </button>
+            <div id="credentials-box" class="credentials-box" style="display: none;">
+                <div class="input-row">
+                    <input type="text" id="rdp-user" class="input-text" placeholder="Nome Utente Windows (opzionale)" autocomplete="off">
+                </div>
+                <div class="input-row">
+                    <input type="password" id="rdp-pass" class="input-text" placeholder="Password Windows (opzionale)" autocomplete="off">
+                </div>
+                <div class="input-row checkbox-row">
+                    <label class="checkbox-label" for="rdp-save-pass">
+                        <input type="checkbox" id="rdp-save-pass" class="checkbox-input">
+                        <span>Salva la password</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-box">
+            <button id="btn-connect" class="btn btn-connect" onclick="startConnection()">
+                CONNETTI
+            </button>
+        </div>
+
+        <div id="connection-overlay" class="connection-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <div class="connecting-title" id="connecting-title">Connessione in corso...</div>
+            <div class="connecting-sub" id="connecting-sub">Avvio FreeRDP via Tailscale</div>
+            <button class="btn btn-danger" style="margin-top: 20px;" onclick="cancelConnection()">Annulla</button>
+        </div>
+
+        <hr class="card-divider">
+
+        <div class="quick-nav-grid">
+            <a href="/wifi" class="btn btn-secondary">Configura Wi-Fi</a>
+            <a href="/hosts" class="btn btn-secondary">Gestisci PC</a>
+            <a href="/diagnostics" class="btn btn-secondary">Diagnostica</a>
+            <button class="btn btn-secondary" onclick="confirmReboot()">Riavvia</button>
+            <button class="btn btn-secondary btn-danger-soft" onclick="confirmPoweroff()">Spegni</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let isConnecting = false;
+
+function toggleCredentials() {
+    const box = document.getElementById('credentials-box');
+    box.style.display = (box.style.display === 'none') ? 'block' : 'none';
+}
+
+function onHostSelected() {
+    const selector = document.getElementById('host-selector');
+    if (!selector || selector.selectedIndex < 0) return;
+    const selectedOpt = selector.options[selector.selectedIndex];
+    const defaultUser = selectedOpt.getAttribute('data-username') || '';
+    const defaultPass = selectedOpt.getAttribute('data-password') || '';
+    const userInput = document.getElementById('rdp-user');
+    const passInput = document.getElementById('rdp-pass');
+    const saveCheckbox = document.getElementById('rdp-save-pass');
+    const btnCred = document.getElementById('btn-toggle-cred');
+
+    if (userInput) {
+        userInput.value = defaultUser;
+    }
+    if (passInput) {
+        passInput.value = defaultPass;
+    }
+    if (saveCheckbox) {
+        saveCheckbox.checked = Boolean(defaultPass);
+    }
+    if (btnCred) {
+        btnCred.innerHTML = defaultPass
+            ? 'Opzioni accesso Windows (🔒 password salvata) ▼'
+            : 'Opzioni accesso Windows (opzionale) ▼';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    onHostSelected();
+
+    const userInput = document.getElementById('rdp-user');
+    const passInput = document.getElementById('rdp-pass');
+
+    if (userInput) {
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                passInput ? passInput.focus() : startConnection();
+            }
+        });
+    }
+
+    if (passInput) {
+        passInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                startConnection();
+            }
+        });
+    }
+
+    initBootSplash();
+});
+
+function startConnection() {
+    const selector = document.getElementById('host-selector');
+    const hostKey = selector.value;
+    const hostName = selector.options[selector.selectedIndex].text;
+    const user = document.getElementById('rdp-user').value.trim();
+    const pass = document.getElementById('rdp-pass').value;
+    const savePass = document.getElementById('rdp-save-pass') ? document.getElementById('rdp-save-pass').checked : false;
+
+    const overlay = document.getElementById('connection-overlay');
+    const title = document.getElementById('connecting-title');
+    const sub = document.getElementById('connecting-sub');
+
+    title.innerText = `Connessione a ${hostName}...`;
+    sub.innerText = "Negoziazione sessione RDP protetta su Tailscale";
+    overlay.style.display = 'flex';
+    isConnecting = true;
+
+    fetch('/api/rdp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            host_key: hostKey,
+            username: user,
+            password: pass,
+            save_password: savePass
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (!data.success) {
+            overlay.style.display = 'none';
+            isConnecting = false;
+            showModal("Errore Connessione", data.message || "Impossibile avviare RDP");
+        } else {
+            const selectedOpt = selector.options[selector.selectedIndex];
+            if (savePass && pass) {
+                selectedOpt.setAttribute('data-password', pass);
+                selectedOpt.setAttribute('data-username', user);
+            } else if (!savePass) {
+                selectedOpt.setAttribute('data-password', '');
+            }
+            const btnCred = document.getElementById('btn-toggle-cred');
+            if (btnCred) {
+                btnCred.innerHTML = (savePass && pass)
+                    ? 'Opzioni accesso Windows (🔒 password salvata) ▼'
+                    : 'Opzioni accesso Windows (opzionale) ▼';
+            }
+        }
+    })
+    .catch(err => {
+        overlay.style.display = 'none';
+        isConnecting = false;
+        showModal("Errore di Rete", "Errore di comunicazione con il servizio locale.");
+    });
+}
+
+function cancelConnection() {
+    fetch('/api/rdp/disconnect', { method: 'POST' })
+    .then(() => {
+        document.getElementById('connection-overlay').style.display = 'none';
+        isConnecting = false;
+    });
+}
+
+// Poll RDP state
+setInterval(() => {
+    fetch('/api/rdp/status')
+    .then(res => res.json())
+    .then(data => {
+        const overlay = document.getElementById('connection-overlay');
+        if (data.state === 'CONNECTED') {
+            overlay.style.display = 'flex';
+            document.getElementById('connecting-title').innerText = `Sessione attiva: ${data.host || ''}`;
+            document.getElementById('connecting-sub').innerText = "Sessione FreeRDP in esecuzione a tutto schermo.";
+        } else if (data.state === 'IDLE' && isConnecting) {
+            overlay.style.display = 'none';
+            isConnecting = false;
+            if (data.error) {
+                showModal("Disconnessione RDP", data.error);
+                // Expand credentials box automatically if authentication/NLA is required
+                if (data.error.includes("NLA") || data.error.includes("Autenticazione") || data.error.includes("Credenziali")) {
+                    const box = document.getElementById('credentials-box');
+                    if (box) box.style.display = 'block';
+                    const userInput = document.getElementById('rdp-user');
+                    const passInput = document.getElementById('rdp-pass');
+                    setTimeout(() => {
+                        if (userInput && !userInput.value) {
+                            userInput.focus();
+                        } else if (passInput) {
+                            passInput.focus();
+                        }
+                    }, 300);
+                }
+            }
+        }
+    })
+    .catch(() => {});
+}, 1500);
+
+// --- HiDaThin Cyberpunk Boot Splash Controller ---
+function initBootSplash() {
+    const splash = document.getElementById('boot-splash');
+    if (!splash) return;
+
+    fetch('/api/boot/status?force=1')
+        .then(r => r.json())
+        .then(data => {
+            const bootId = data.boot_id || 'default_boot';
+            const savedBootId = sessionStorage.getItem('hidathin_boot_id');
+
+            // If navigating between tabs during the same session, dismiss immediately
+            if (savedBootId === bootId) {
+                splash.style.pointerEvents = 'none';
+                splash.style.display = 'none';
+                return;
+            }
+
+            // Fresh boot or new session: execute Cyberpunk bootstrap sequence!
+            runCyberpunkBootSequence(data, bootId);
+        })
+        .catch(err => {
+            console.error("Boot status error:", err);
+            setTimeout(() => {
+                const fallback = document.getElementById('boot-fallback-actions');
+                if (fallback) fallback.style.display = 'flex';
+            }, 5000);
+        });
+}
+
+function runCyberpunkBootSequence(initialData, bootId) {
+    const splash = document.getElementById('boot-splash');
+    const fill = document.getElementById('boot-progress-fill');
+    const percent = document.getElementById('boot-progress-percent');
+    const label = document.getElementById('boot-progress-label');
+
+    const itemSys = document.getElementById('boot-step-system');
+    const itemNet = document.getElementById('boot-step-network');
+    const iconNet = document.getElementById('icon-network-status');
+    const subNet = document.getElementById('boot-step-network-sub');
+
+    const itemTs = document.getElementById('boot-step-tailscale');
+    const iconTs = document.getElementById('icon-ts-status');
+    const subTs = document.getElementById('boot-step-tailscale-sub');
+
+    const itemRdp = document.getElementById('boot-step-rdp');
+    const iconRdp = document.getElementById('icon-rdp-status');
+    const subRdp = document.getElementById('boot-step-rdp-sub');
+
+    const fallbackActions = document.getElementById('boot-fallback-actions');
+
+    function setProgress(val, text) {
+        if (fill) fill.style.width = val + '%';
+        if (percent) percent.innerText = val + '%';
+        if (label && text) label.innerText = text;
+    }
+
+    // Stage 1 (0.0s - 0.9s): Subsystem ready
+    setProgress(25, "MOTORE KIOSK HIDATHIN PRONTO");
+
+    // Stage 2 (0.9s): Network Link
+    setTimeout(() => {
+        setProgress(50, "VERIFICA CONNESSIONE RETE LOCALE...");
+        itemNet.classList.add('item-active');
+
+        function updateNetworkView(data) {
+            const wf = data.network?.wifi || {};
+            const eth = data.network?.ethernet || {};
+            if (wf.connected || eth.connected) {
+                itemNet.className = 'boot-check-item item-success cyber-item';
+                iconNet.className = 'boot-check-icon icon-success cyber-icon';
+                iconNet.innerHTML = '✔';
+                const ip = wf.connected ? wf.ip : eth.ip;
+                subNet.innerText = wf.connected ? `Connesso: ${wf.ssid} (IP: ${ip || '--'})` : `Ethernet (IP: ${ip || '--'})`;
+                return true;
+            }
+            return false;
+        }
+
+        // Stage 3 (1.8s): Tailscale WireGuard
+        function updateTailscaleView(data) {
+            setProgress(75, "VERIFICA TUNNEL VPN TAILSCALE...");
+            itemTs.classList.add('item-active');
+            const ts = data.tailscale || {};
+            if (ts.connected) {
+                itemTs.className = 'boot-check-item item-success cyber-item';
+                iconTs.className = 'boot-check-icon icon-success cyber-icon';
+                iconTs.innerHTML = '✔';
+                subTs.innerText = `Tunnel attivo (IP: ${ts.ip || '--'})`;
+                return true;
+            }
+            return false;
+        }
+
+        // Stage 4 (2.7s): RDP Host
+        function updateHostView(data) {
+            setProgress(100, "BOOT COMPLETATO - ACCESSO...");
+            itemRdp.classList.add('item-active');
+            const host = data.default_host || {};
+            itemRdp.className = 'boot-check-item item-success cyber-item';
+            iconRdp.className = 'boot-check-icon icon-success cyber-icon';
+            iconRdp.innerHTML = '✔';
+            if (host.reachable === true) {
+                subRdp.innerText = `${host.name || host.target}: Online (Porta 3389)`;
+            } else {
+                subRdp.innerText = `${host.name || 'Host Predefinito'}: Selezionato e pronto`;
+            }
+
+            // Finish sequence: smooth fade-out
+            setTimeout(() => {
+                sessionStorage.setItem('hidathin_boot_id', bootId);
+                dismissBootSplash();
+            }, 1000);
+        }
+
+        let stage = 2;
+        let elapsed = 0;
+        const poll = setInterval(() => {
+            elapsed += 0.8;
+            fetch('/api/boot/status?force=1')
+                .then(r => r.json())
+                .then(latest => {
+                    const netOk = updateNetworkView(latest);
+                    if (netOk && stage === 2) {
+                        stage = 3;
+                        setTimeout(() => {
+                            const tsOk = updateTailscaleView(latest);
+                            if (tsOk || elapsed > 3) {
+                                stage = 4;
+                                setTimeout(() => {
+                                    clearInterval(poll);
+                                    updateHostView(latest);
+                                }, 900);
+                            }
+                        }, 800);
+                    } else if (stage === 3) {
+                        const tsOk = updateTailscaleView(latest);
+                        if (tsOk || elapsed > 5) {
+                            stage = 4;
+                            clearInterval(poll);
+                            setTimeout(() => updateHostView(latest), 800);
+                        }
+                    }
+
+                    if (elapsed > 10 && !latest.network?.wifi?.connected && !latest.network?.ethernet?.connected) {
+                        fallbackActions.style.display = 'flex';
+                    }
+                })
+                .catch(() => {});
+        }, 800);
+
+    }, 900);
+}
+
+function dismissBootSplash() {
+    const splash = document.getElementById('boot-splash');
+    if (splash) {
+        splash.style.pointerEvents = 'none';
+        splash.style.opacity = '0';
+        setTimeout(() => {
+            splash.style.display = 'none';
+        }, 600);
+    }
+}
+
+function confirmReboot() {
+    if (confirm("Sei sicuro di voler riavviare il dispositivo?")) {
+        fetch('/api/system/reboot', { method: 'POST' });
+        showModal("Riavvio", "Il sistema si sta riavviando...");
+    }
+}
+
+function confirmPoweroff() {
+    if (confirm("Sei sicuro di voler spegnere il dispositivo?")) {
+        fetch('/api/system/poweroff', { method: 'POST' });
+        showModal("Spegnimento", "Il sistema si sta arrestando...");
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="screen-center">
+    <div class="card card-wide">
+        <h2>Impostazioni e Profili Prestazioni</h2>
+        <p class="card-subtitle">Ottimizzazione grafica e parametri FreeRDP per Raspberry Pi 3</p>
+
+        <form id="settings-form" onsubmit="saveSettingsForm(event)">
+            <div class="form-group">
+                <label for="setting-profile"><strong>Profilo RDP:</strong></label>
+                <select id="setting-profile" class="input-text">
+                    <option value="performance" {% if settings.profile == 'performance' %}selected{% endif %}>
+                        Prestazioni Elevate (Massima fluidità, compressione elevata, effetti Windows disabilitati, 16-bit)
+                    </option>
+                    <option value="balanced" {% if settings.profile == 'balanced' %}selected{% endif %}>
+                        Bilanciato - Consigliato (Font nitidi, audio attivo, cache bitmap e glifi)
+                    </option>
+                    <option value="quality" {% if settings.profile == 'quality' %}selected{% endif %}>
+                        Qualità Massima (GFX attivo, 32-bit colore, effetti visivi completi)
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-row-2">
+                <div class="form-group">
+                    <label for="setting-resolution"><strong>Risoluzione Display:</strong></label>
+                    <select id="setting-resolution" class="input-text">
+                        <option value="auto" {% if settings.resolution == 'auto' %}selected{% endif %}>
+                            Automatica (Rileva schermo: {{ metrics.resolution }})
+                        </option>
+                        <option value="1920x1080" {% if settings.resolution == '1920x1080' %}selected{% endif %}>1920x1080 (Full HD)</option>
+                        <option value="1600x900" {% if settings.resolution == '1600x900' %}selected{% endif %}>1600x900 (HD+)</option>
+                        <option value="1280x720" {% if settings.resolution == '1280x720' %}selected{% endif %}>1280x720 (720p - Molto leggero)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="setting-bpp"><strong>Profondità Colore (bpp):</strong></label>
+                    <select id="setting-bpp" class="input-text">
+                        <option value="16" {% if settings.color_depth == 16 %}selected{% endif %}>16 bit (Prestazioni massime)</option>
+                        <option value="24" {% if settings.color_depth == 24 %}selected{% endif %}>24 bit (Bilanciato predefinito)</option>
+                        <option value="32" {% if settings.color_depth == 32 %}selected{% endif %}>32 bit (Qualità fedele)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row-2" style="margin-top: 10px;">
+                <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="setting-sound" style="transform:scale(1.3);" {% if settings.sound %}checked{% endif %}>
+                    <label for="setting-sound">Abilita reindirizzamento Audio (ALSA)</label>
+                </div>
+
+                <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="setting-reconnect" style="transform:scale(1.3);" {% if settings.auto_reconnect %}checked{% endif %}>
+                    <label for="setting-reconnect">Riconnessione automatica in caso di caduta linea</label>
+                </div>
+            </div>
+
+            <!-- VNC Remote Assistance Supervision -->
+            <div style="margin: 25px 0; border-top: 1px solid var(--card-border);"></div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div>
+                    <h3 style="color: #60a5fa; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                        <span>📡 Supervisione e Assistenza Remota (VNC)</span>
+                    </h3>
+                    <p class="card-subtitle" style="margin-top: 4px;">Accesso al display fisico (:0) per assistenza remota all'operatore</p>
+                </div>
+                <div class="status-badge {% if vnc.active %}badge-connected{% else %}badge-disconnected{% endif %}">
+                    <span class="badge-dot">●</span> {{ 'Servizio Attivo' if vnc.active else 'Non Attivo' }}
+                </div>
+            </div>
+
+            <div class="form-row-2">
+                <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="setting-vnc-enabled" style="transform:scale(1.3);" {% if settings.vnc.enabled %}checked{% endif %} onchange="toggleVncFields()">
+                    <label for="setting-vnc-enabled"><strong>Abilita Server VNC (Porta 5900)</strong></label>
+                </div>
+
+                <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="setting-vnc-tailscale-only" style="transform:scale(1.3);" {% if settings.vnc.bind_tailscale_only %}checked{% endif %}>
+                    <label for="setting-vnc-tailscale-only"><strong>Limita a VPN Tailscale (Consigliato)</strong></label>
+                </div>
+            </div>
+
+            <div id="vnc-details-box" style="margin-top: 15px; {% if not settings.vnc.enabled %}display:none;{% endif %}">
+                <div class="form-group">
+                    <label for="setting-vnc-password"><strong>Password VNC di Accesso:</strong></label>
+                    <input type="text" id="setting-vnc-password" class="input-text" placeholder="Lascia vuoto per non modificare (predefinita: thinclient)">
+                    <small style="color: var(--text-secondary); display:block; margin-top:4px;">
+                        Autenticazione richiesta da qualsiasi client VNC (RealVNC Viewer, Remmina, TightVNC).
+                    </small>
+                </div>
+
+                <div class="credentials-box" style="margin-top: 15px; background: #0b1329;">
+                    <h4 style="color: #93c5fd; margin-bottom: 8px; font-size: 0.95rem;">Informazioni di Connessione per il Tecnico:</h4>
+                    <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse;">
+                        <tr>
+                            <td style="color: var(--text-secondary); padding: 4px 0;">Indirizzo MagicDNS:</td>
+                            <td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_host }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary); padding: 4px 0;">Indirizzo IP Tailscale:</td>
+                            <td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_ip or 'In attesa IP Tailscale...' }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary); padding: 4px 0;">Client Connessi:</td>
+                            <td><strong style="color: {% if vnc.clients_count > 0 %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ vnc.clients_count }} attivi</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-buttons" style="margin-top: 30px;">
+                <a href="/" class="btn btn-secondary">◄ Annulla</a>
+                <button type="submit" class="btn btn-primary">Salva Impostazioni</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleVncFields() {
+    const enabled = document.getElementById('setting-vnc-enabled').checked;
+    const box = document.getElementById('vnc-details-box');
+    if (box) {
+        box.style.display = enabled ? 'block' : 'none';
+    }
+}
+
+function saveSettingsForm(e) {
+    e.preventDefault();
+    const rdpPayload = {
+        profile: document.getElementById('setting-profile').value,
+        resolution: document.getElementById('setting-resolution').value,
+        color_depth: parseInt(document.getElementById('setting-bpp').value) || 24,
+        sound: document.getElementById('setting-sound').checked,
+        auto_reconnect: document.getElementById('setting-reconnect').checked,
+        fullscreen: true
+    };
+
+    const vncPayload = {
+        enabled: document.getElementById('setting-vnc-enabled').checked,
+        bind_tailscale_only: document.getElementById('setting-vnc-tailscale-only').checked,
+        password: document.getElementById('setting-vnc-password').value.trim()
+    };
+
+    // Save general settings
+    fetch('/api/settings/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rdpPayload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            showModal("Errore", data.message);
+            return;
+        }
+
+        // Save VNC settings
+        return fetch('/api/vnc/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(vncPayload)
+        })
+        .then(r => r.json())
+        .then(vncData => {
+            if (vncData.success) {
+                showModal("Impostazioni", "Impostazioni e configurazione VNC salvate con successo.");
+            } else {
+                showModal("Avviso", "Impostazioni salvate, ma errore VNC: " + vncData.message);
+            }
+        });
+    })
+    .catch(err => {
+        showModal("Errore", "Errore di comunicazione durante il salvataggio.");
+    });
+}
+</script>
+{% endblock %}

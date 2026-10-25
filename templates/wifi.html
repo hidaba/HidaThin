@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="screen-center">
+    <div class="card card-wide">
+        <div class="card-header-bar">
+            <h2>Configurazione Wi-Fi</h2>
+            <button class="btn btn-secondary" onclick="scanNetworks()">↻ Cerca Reti</button>
+        </div>
+
+        <div class="current-wifi-panel">
+            <div class="panel-row">
+                <span class="panel-label">Rete Wi-Fi attuale:</span>
+                <span class="panel-value" id="current-ssid">--</span>
+            </div>
+            <div class="panel-row">
+                <span class="panel-label">Segnale:</span>
+                <span class="panel-value" id="current-signal">--</span>
+            </div>
+            <div class="panel-row">
+                <span class="panel-label">Indirizzo IP:</span>
+                <span class="panel-value" id="current-ip">--</span>
+            </div>
+            <div class="panel-row">
+                <span class="panel-label">Gateway:</span>
+                <span class="panel-value" id="current-gw">--</span>
+            </div>
+        </div>
+
+        <h3 class="section-subtitle">Reti Wi-Fi Disponibili</h3>
+        <div id="wifi-scan-loading" style="display: none; text-align: center; padding: 20px;">
+            <div class="spinner"></div>
+            <p>Scansione reti Wi-Fi in corso...</p>
+        </div>
+
+        <div class="table-container">
+            <table class="table-wifi" id="wifi-table">
+                <thead>
+                    <tr>
+                        <th>SSID</th>
+                        <th>Segnale</th>
+                        <th>Sicurezza</th>
+                        <th>Azione</th>
+                    </tr>
+                </thead>
+                <tbody id="wifi-list-body">
+                    <tr><td colspan="4" style="text-align: center;">Caricamento reti in corso...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-top: 25px; display: flex; justify-content: space-between;">
+            <a href="/" class="btn btn-secondary">◄ Torna al Menu Principale</a>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Connessione Wi-Fi -->
+<div id="wifi-connect-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+        <h3>Connetti a Rete Wi-Fi</h3>
+        <p>SSID: <strong id="modal-ssid-label">--</strong></p>
+        <div id="pwd-field-container">
+            <label for="wifi-password" style="display:block; margin: 10px 0 5px 0;">Password di rete:</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="password" id="wifi-password" class="input-text" placeholder="Inserisci password Wi-Fi" autocomplete="off" style="flex: 1;" onkeydown="if(event.key==='Enter') submitWifiConnect();">
+                <button type="button" class="btn btn-secondary" onclick="togglePasswordVisibility()" id="btn-toggle-pwd" style="padding: 10px 14px; font-size: 1.1em;" title="Mostra/Nascondi password">👁</button>
+            </div>
+            <div style="margin-top: 8px; text-align: left;">
+                <label style="cursor: pointer; font-size: 0.9em; user-select: none; color: #a0aec0;">
+                    <input type="checkbox" id="chk-show-pwd" onchange="togglePasswordVisibilityCheckbox(this.checked)"> Mostra password in chiaro
+                </label>
+            </div>
+        </div>
+        <div class="modal-buttons" style="margin-top: 20px;">
+            <button class="btn btn-secondary" onclick="closeWifiModal()">Annulla</button>
+            <button class="btn btn-primary" onclick="submitWifiConnect()">CONNETTI</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let targetSsid = "";
+let isTargetSecure = true;
+
+function loadCurrentWifi() {
+    fetch('/api/wifi/status')
+    .then(r => r.json())
+    .then(data => {
+        const wf = data.wifi || {};
+        document.getElementById('current-ssid').innerText = wf.connected ? wf.ssid : "Non connesso";
+        document.getElementById('current-signal').innerText = wf.connected ? `${wf.signal}%` : "--";
+        document.getElementById('current-ip').innerText = wf.ip || "--";
+        document.getElementById('current-gw').innerText = wf.gateway || "--";
+    });
+}
+
+function scanNetworks() {
+    const loader = document.getElementById('wifi-scan-loading');
+    const tableBody = document.getElementById('wifi-list-body');
+    loader.style.display = 'block';
+
+    fetch('/api/wifi/scan', { method: 'POST' })
+    .then(r => r.json())
+    .then(networks => {
+        loader.style.display = 'none';
+        tableBody.innerHTML = '';
+        if (!networks || networks.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Nessuna rete Wi-Fi trovata.</td></tr>';
+            return;
+        }
+
+        networks.forEach(net => {
+            const tr = document.createElement('tr');
+            if (net.in_use) tr.className = 'row-active';
+
+            tr.innerHTML = `
+                <td><strong>${escapeHtml(net.ssid)}</strong> ${net.in_use ? '<span class="tag-active">Attiva</span>' : ''}</td>
+                <td>${net.signal}%</td>
+                <td>${escapeHtml(net.security)}</td>
+                <td>
+                    ${net.in_use ? 
+                        `<button class="btn btn-small btn-danger" onclick="forgetNetwork('${escapeHtml(net.ssid)}')">Dimentica</button>` :
+                        `<button class="btn btn-small btn-primary" onclick="openWifiModal('${escapeHtml(net.ssid)}', ${net.is_secure})">Connetti</button>`
+                    }
+                </td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    })
+    .catch(() => {
+        loader.style.display = 'none';
+        showModal("Errore", "Impossibile completare la scansione Wi-Fi.");
+    });
+}
+
+function togglePasswordVisibility() {
+    const input = document.getElementById('wifi-password');
+    const chk = document.getElementById('chk-show-pwd');
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    chk.checked = isPass;
+}
+
+function togglePasswordVisibilityCheckbox(show) {
+    const input = document.getElementById('wifi-password');
+    input.type = show ? 'text' : 'password';
+}
+
+function openWifiModal(ssid, secure) {
+    targetSsid = ssid;
+    isTargetSecure = secure;
+    document.getElementById('modal-ssid-label').innerText = ssid;
+    document.getElementById('pwd-field-container').style.display = secure ? 'block' : 'none';
+    const pwdInput = document.getElementById('wifi-password');
+    pwdInput.value = '';
+    pwdInput.type = 'password';
+    document.getElementById('chk-show-pwd').checked = false;
+    document.getElementById('wifi-connect-modal').style.display = 'flex';
+    if (secure) {
+        setTimeout(() => pwdInput.focus(), 150);
+    }
+}
+
+function closeWifiModal() {
+    document.getElementById('wifi-connect-modal').style.display = 'none';
+}
+
+function submitWifiConnect() {
+    const password = document.getElementById('wifi-password').value;
+    closeWifiModal();
+    showModal("Connessione", `Connessione alla rete ${targetSsid} in corso...`);
+
+    fetch('/api/wifi/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssid: targetSsid, password: password })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showModal("Successo", `Connesso con successo alla rete ${targetSsid}!`);
+            loadCurrentWifi();
+            scanNetworks();
+        } else {
+            showModal("Errore Connessione", data.message || "Impossibile connettersi alla rete Wi-Fi.");
+        }
+    })
+    .catch(() => {
+        showModal("Errore", "Errore durante la richiesta di connessione.");
+    });
+}
+
+function forgetNetwork(ssid) {
+    if (confirm(`Sei sicuro di voler dimenticare la rete ${ssid}?`)) {
+        fetch('/api/wifi/forget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ssid: ssid })
+        })
+        .then(r => r.json())
+        .then(data => {
+            showModal("Rete Wi-Fi", data.message);
+            loadCurrentWifi();
+            scanNetworks();
+        });
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.innerText = text;
+    return div.innerHTML;
+}
+
+loadCurrentWifi();
+scanNetworks();
+</script>
+{% endblock %}

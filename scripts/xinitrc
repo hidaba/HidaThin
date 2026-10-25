@@ -1,0 +1,55 @@
+#!/bin/bash
+# Minimal X11 kiosk session for Thin Client
+
+# Disable DPMS and screen blanking
+xset s off
+xset s noblank
+xset -dpms
+
+# Set 1:1 linear pointer acceleration in X11 (disable legacy acceleration curves)
+xset m 1 1
+
+# Set seamless dark background matching UI theme
+xsetroot -solid "#0f172a" &
+
+# Start Openbox window manager
+openbox &
+
+# Wait for local Thin Client Flask web server to respond
+echo "Waiting for Thin Client web service on http://127.0.0.1:8080..."
+until curl -s http://127.0.0.1:8080/ >/dev/null; do
+    sleep 0.5
+done
+
+# Launch Chromium in dedicated kiosk mode with minimal footprint
+while true; do
+    echo "Starting Chromium Kiosk UI..."
+    chromium \
+        --no-sandbox \
+        --kiosk \
+        --incognito \
+        --noerrdialogs \
+        --disable-infobars \
+        --disable-translate \
+        --lang=it \
+        --no-first-run \
+        --disable-features=Translate,TranslateUI,TranslateModel \
+        --disable-sync \
+        --disable-background-networking \
+        --disable-component-update \
+        --disable-component-cloud-policy \
+        --disable-extensions \
+        --disable-notifications \
+        --overscroll-history-navigation=0 \
+        --no-gl-override \
+        --disable-gpu \
+        --disable-gpu-rasterization \
+        --disable-software-rasterizer \
+        --disable-dev-shm-usage \
+        --renderer-process-limit=1 \
+        --disable-speech-api \
+        --disable-breakpad \
+        --disable-crash-reporter \
+        --app=http://127.0.0.1:8080
+    sleep 1
+done

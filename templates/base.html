@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="it" translate="no" class="notranslate">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="google" content="notranslate">
+    <title>HiDaThin</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-title">
+                <h1>HiDaThin</h1>
+            </div>
+            <div class="header-badges">
+                <div id="badge-wifi" class="status-badge badge-pending">
+                    <span class="badge-dot">●</span> Wi-Fi: <span id="wifi-status-text">Verifica...</span>
+                </div>
+                <div id="badge-tailscale" class="status-badge badge-pending">
+                    <span class="badge-dot">●</span> Tailscale: <span id="tailscale-status-text">Verifica...</span>
+                </div>
+                <div id="badge-vnc" class="status-badge badge-connected" style="display: none; background: rgba(37, 99, 235, 0.2); border-color: #3b82f6; color: #93c5fd;">
+                    <span class="badge-dot">●</span> <span>Assistenza Remota Attiva</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-content">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="app-footer">
+            <div class="footer-info">
+                <span id="system-info-text">IP: -- | Tailscale: --</span>
+            </div>
+            <div class="footer-actions">
+                <a href="/" class="btn-nav">Home</a>
+                <a href="/wifi" class="btn-nav">Wi-Fi</a>
+                <a href="/hosts" class="btn-nav">Gestisci PC</a>
+                <a href="/diagnostics" class="btn-nav">Diagnostica</a>
+                <a href="/settings" class="btn-nav">⚙ Impostazioni</a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal for notifications/errors -->
+    <div id="app-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <h3 id="modal-title">Avviso</h3>
+            <p id="modal-message"></p>
+            <div class="modal-buttons" id="modal-buttons">
+                <button class="btn btn-primary" onclick="closeModal()">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

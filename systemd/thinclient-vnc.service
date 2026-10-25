@@ -1,0 +1,18 @@
+[Unit]
+Description=Thin Client VNC Remote Assistance Service
+After=thinclient-ui.service tailscaled.service
+Wants=thinclient-ui.service
+PartOf=thinclient-ui.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/thinclient
+ExecStart=/bin/bash /opt/thinclient/scripts/x11vnc-start.sh
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

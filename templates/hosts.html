@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="screen-center">
+    <div class="card card-wide">
+        <div class="card-header-bar">
+            <h2>Gestione PC RDP</h2>
+            <button class="btn btn-primary" onclick="openHostModal()">+ Aggiungi Nuovo PC</button>
+        </div>
+
+        <div class="table-container">
+            <table class="table-wifi">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Hostname MagicDNS</th>
+                        <th>IP Tailscale</th>
+                        <th>Utente predefinito</th>
+                        <th>Porta</th>
+                        <th>Predefinito</th>
+                        <th>Azioni</th>
+                    </tr>
+                </thead>
+                <tbody id="hosts-table-body">
+                    {% for key, host in hosts.items() %}
+                    <tr>
+                        <td><strong>{{ host.name }}</strong></td>
+                        <td>{{ host.hostname }}</td>
+                        <td>{{ host.ip or '--' }}</td>
+                        <td>
+                            {{ host.username or '--' }}
+                            {% if host.password %}
+                            <span title="Password salvata" style="color: #4ade80; margin-left: 6px; font-size: 0.85em;">🔒 Salvata</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ host.port or 3389 }}</td>
+                        <td>
+                            {% if key == default_host %}
+                            <span class="tag-default">Predefinito</span>
+                            {% else %}
+                            <button class="btn btn-small btn-secondary" onclick="setDefaultHost('{{ key }}')">Imposta</button>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-small btn-secondary" onclick="testHostReachability('{{ host.hostname }}')">Ping</button>
+                            <button class="btn btn-small btn-secondary" onclick='editHost({{ key|tojson }}, {{ host|tojson }})'>Modifica</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteHost('{{ key }}')">Elimina</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-top: 25px; display: flex; justify-content: space-between;">
+            <a href="/" class="btn btn-secondary">◄ Torna al Menu Principale</a>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aggiungi/Modifica PC -->
+<div id="host-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+        <h3 id="host-modal-title">Configura PC Remoto</h3>
+        <input type="hidden" id="host-key">
+        
+        <div class="form-group">
+            <label for="host-name">Nome visualizzato:</label>
+            <input type="text" id="host-name" class="input-text" placeholder="Es. PC Mimmo">
+        </div>
+        <div class="form-group">
+            <label for="host-hostname">Hostname MagicDNS / Tailscale:</label>
+            <input type="text" id="host-hostname" class="input-text" placeholder="Es. pc-mimmo">
+        </div>
+        <div class="form-group">
+            <label for="host-ip">Indirizzo IP Tailscale (opzionale):</label>
+            <input type="text" id="host-ip" class="input-text" placeholder="Es. 100.64.0.7">
+        </div>
+        <div class="form-group">
+            <label for="host-username">Nome Utente Windows predefinito (opzionale):</label>
+            <input type="text" id="host-username" class="input-text" placeholder="Es. hidab">
+        </div>
+        <div class="form-group">
+            <label for="host-password">Password Windows salvata (opzionale):</label>
+            <input type="password" id="host-password" class="input-text" placeholder="Lascia vuoto se non impostata">
+        </div>
+        <div class="form-group">
+            <label for="host-port">Porta RDP:</label>
+            <input type="number" id="host-port" class="input-text" value="3389">
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" id="host-default" style="transform: scale(1.3);">
+            <label for="host-default">Imposta come PC predefinito all'avvio</label>
+        </div>
+
+        <div class="modal-buttons" style="margin-top: 20px;">
+            <button class="btn btn-secondary" onclick="closeHostModal()">Annulla</button>
+            <button class="btn btn-primary" onclick="saveHost()">Salva Configurazione</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openHostModal() {
+    document.getElementById('host-modal-title').innerText = "Aggiungi Nuovo PC";
+    document.getElementById('host-key').value = "";
+    document.getElementById('host-name').value = "";
+    document.getElementById('host-hostname').value = "";
+    document.getElementById('host-ip').value = "";
+    document.getElementById('host-username').value = "";
+    document.getElementById('host-password').value = "";
+    document.getElementById('host-port').value = "3389";
+    document.getElementById('host-default').checked = false;
+    document.getElementById('host-modal').style.display = 'flex';
+}
+
+function editHost(key, host) {
+    document.getElementById('host-modal-title').innerText = `Modifica ${host.name}`;
+    document.getElementById('host-key').value = key;
+    document.getElementById('host-name').value = host.name || "";
+    document.getElementById('host-hostname').value = host.hostname || "";
+    document.getElementById('host-ip').value = host.ip || "";
+    document.getElementById('host-username').value = host.username || "";
+    document.getElementById('host-password').value = host.password || "";
+    document.getElementById('host-port').value = host.port || 3389;
+    document.getElementById('host-default').checked = (key === "{{ default_host }}");
+    document.getElementById('host-modal').style.display = 'flex';
+}
+
+function closeHostModal() {
+    document.getElementById('host-modal').style.display = 'none';
+}
+
+function saveHost() {
+    const key = document.getElementById('host-key').value;
+    const name = document.getElementById('host-name').value.trim();
+    const hostname = document.getElementById('host-hostname').value.trim();
+    const ip = document.getElementById('host-ip').value.trim();
+    const username = document.getElementById('host-username').value.trim();
+    const password = document.getElementById('host-password').value;
+    const port = parseInt(document.getElementById('host-port').value) || 3389;
+    const isDefault = document.getElementById('host-default').checked;
+
+    if (!name || !hostname) {
+        alert("Inserisci Nome e Hostname del computer.");
+        return;
+    }
+
+    fetch('/api/hosts/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, name, hostname, ip, username, password, port, is_default: isDefault })
+    })
+    .then(r => r.json())
+    .then(data => {
+        closeHostModal();
+        if (data.success) {
+            window.location.reload();
+        } else {
+            showModal("Errore", data.message);
+        }
+    });
+}
+
+function deleteHost(key) {
+    if (confirm("Sei sicuro di voler eliminare questo computer dalla lista?")) {
+        fetch('/api/hosts/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                showModal("Errore", data.message);
+            }
+        });
+    }
+}
+
+function setDefaultHost(key) {
+    fetch('/api/hosts/set-default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            showModal("Errore", data.message);
+        }
+    });
+}
+
+function testHostReachability(host) {
+    showModal("Test Connessione", `Test ping verso ${host}...`);
+    fetch(`/api/tailscale/ping?host=${encodeURIComponent(host)}`)
+    .then(r => r.json())
+    .then(data => {
+        showModal(`Esito Ping: ${host}`, data.success ? `Successo! ${data.message}` : `Fallito: ${data.message}`);
+    });
+}
+</script>
+{% endblock %}
