@@ -80,6 +80,11 @@ function updateGlobalStatus() {
             footerInfo.innerText = `IP Locale: ${primaryIp} | Tailscale IP: ${tsIp}`;
         }
 
+        const footerVersion = document.getElementById('footer-version');
+        if (footerVersion && data.version) {
+            footerVersion.innerText = `v${data.version}`;
+        }
+
         // VNC Remote Assistance Badge
         const vncBadge = document.getElementById('badge-vnc');
         if (vncBadge) {

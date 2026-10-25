@@ -9,6 +9,7 @@ import logging
 import yaml
 from flask import Flask, render_template, request, jsonify
 
+from app import __version__
 from app.wifi import get_network_status, scan_wifi_networks, connect_wifi, forget_wifi
 from app.tailscale import get_tailscale_status, restart_tailscale, ping_host
 from app.system import (
@@ -30,6 +31,12 @@ app = Flask(
     template_folder=os.path.join(BASE_DIR, "templates"),
     static_folder=os.path.join(BASE_DIR, "static")
 )
+
+@app.context_processor
+def inject_globals():
+    return {
+        "app_version": __version__
+    }
 
 def load_hosts_data():
     """Reads hosts from config/hosts.yaml."""
@@ -134,6 +141,7 @@ def api_status():
     ts = get_tailscale_status(force=force)
     vnc = get_vnc_status()
     return jsonify({
+        "version": __version__,
         "network": net,
         "tailscale": ts,
         "vnc": vnc
@@ -172,6 +180,7 @@ def api_boot_status():
                 host_reachable = False
 
     return jsonify({
+        "version": __version__,
         "boot_id": get_system_boot_id(),
         "network": net,
         "tailscale": ts,
