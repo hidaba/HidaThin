@@ -154,9 +154,19 @@ Storage=volatile
 RuntimeMaxUse=32M
 EOF
 
-# Disable SD-card swap services (zram handles swap in RAM)
+# Disable SD-card swap services and configure in-RAM zram swap
+echo "[7b/8] Configurazione swap nativo in RAM (zram) e rimozione swapfile SD..."
+if [ -d /etc/rpi ]; then
+    cat << 'EOF' > /etc/rpi/swap.conf
+[Main]
+Mechanism=zram
+EOF
+fi
+rm -f /var/swap
 systemctl mask rpi-resize-swap-file.service 2>/dev/null || true
 systemctl mask rpi-setup-loop@var-swap.service 2>/dev/null || true
+systemctl mask rpi-remove-swap-file@.service 2>/dev/null || true
+systemctl mask rpi-remove-swap-file@var-swap.service 2>/dev/null || true
 systemctl mask dphys-swapfile.service 2>/dev/null || true
 
 # Symlink random-seed to tmpfs to avoid boot error on RO root
