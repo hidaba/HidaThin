@@ -5,6 +5,16 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.14] - 2026-10-25
+
+### Resilienza e Manutenzione
+- **Filesystem Read-Only con Partizione Persistente /data (Soluzione B)**:
+  - **Script di Configurazione Automatizzato (`scripts/setup-readonly-fs.sh`)**: configurazione di root (`/`) e `/boot/firmware` in sola lettura (`ro`) in `/etc/fstab`, mount bind persistenti per configurazioni HidaThin, credenziali Tailscale e profili Wi-Fi NetworkManager, partizioni RAM volatili `tmpfs` (`/tmp`, `/var/tmp`, `/var/log`, `/var/spool`) e storage volatile per systemd-journald.
+  - **Aggiornamento Sistema Operativo Debian con Gestione RW/RO Garantita (`app/system.py`)**: implementato worker in background che sblocca il filesystem in scrittura (`rw`), lancia `apt update` e `apt dist-upgrade -y`, pulisce i pacchetti obsoleti con `clean`/`autoremove`, esegue il flush dei buffer fisici con `sync` e ripristina garantito (in blocco `finally`) lo stato Read-Only (`ro`).
+  - **Interfaccia Web per Manutenzione & Aggiornamento (`templates/settings.html`, `static/css/style.css`)**: aggiunta sezione dedicata in Impostazioni con badge di stato real-time (`SOLA LETTURA (SD Protetta)` vs `SCRITTURA (RW)`), pulsante di toggle sblocco manuale e pulsante di aggiornamento OS Debian con finestra modale terminale a scorrimento automatico e barra di avanzamento.
+  - **Stato Filesystem in Diagnostica (`templates/diagnostics.html`)**: esposto lo stato di mount di root e della partizione `/data` nella dashboard diagnostica.
+  - **Fallback Automatico Scrittura Config (`app/main.py`, `app/system.py`)**: salvataggio automatico con sblocco temporaneo on-demand in caso di filesystem protetto per `hosts.yaml` e `settings.yaml`.
+
 ## [0.2.13] - 2026-10-25
 
 ### Ottimizzazione e Boot Speed

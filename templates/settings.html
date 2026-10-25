@@ -112,11 +112,73 @@
                 </div>
             </div>
 
+            <!-- Read-Only OS Maintenance & Debian Update (Solution B) -->
+            <div style="margin: 25px 0; border-top: 1px solid var(--card-border);"></div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div>
+                    <h3 style="color: #60a5fa; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                        <span>🛡 Protezione Disco & Aggiornamento Sistema Operativo</span>
+                    </h3>
+                    <p class="card-subtitle" style="margin-top: 4px;">Protezione SD in Sola Lettura (Soluzione B) e aggiornamenti pacchetti Debian</p>
+                </div>
+                <div id="fs-badge" class="status-badge {% if fs.root_ro %}badge-connected{% else %}badge-pending{% endif %}">
+                    <span class="badge-dot">●</span> <span id="fs-badge-text">{{ 'SOLA LETTURA (SD Protetta)' if fs.root_ro else 'SCRITTURA (RW)' }}</span>
+                </div>
+            </div>
+
+            <div class="credentials-box" style="margin-top: 12px; background: #0b1329;">
+                <p style="font-size: 0.9rem; margin-bottom: 12px; color: var(--text-secondary); line-height: 1.5;">
+                    Il sistema operativo e i binari sono protetti da spegnimenti bruschi tramite montaggio in <strong>Sola Lettura (RO)</strong>.
+                    I file di configurazione, Wi-Fi e credenziali Tailscale risiedono sulla partizione persistente <code>/data</code>.
+                </p>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" onclick="toggleFsRemount()" id="btn-toggle-fs">
+                        {% if fs.root_ro %}🔓 Sblocca Temporaneamente in Scrittura (RW){% else %}🔒 Blocca in Sola Lettura (RO){% endif %}
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="confirmStartOsUpdate()" id="btn-start-update" style="background: linear-gradient(135deg, #2563eb, #1d4ed8);">
+                        ⚡ Aggiorna Sistema Operativo (Debian)
+                    </button>
+                </div>
+            </div>
+
             <div class="modal-buttons" style="margin-top: 30px;">
                 <a href="/" class="btn btn-secondary">◄ Annulla</a>
                 <button type="submit" class="btn btn-primary">Salva Impostazioni</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal Dialog for Debian OS Update -->
+<div id="update-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box" style="max-width: 680px; width: 95%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+            <h3 id="update-modal-title" style="margin: 0; color: #60a5fa;">⚡ Aggiornamento Sistema Operativo Debian</h3>
+            <span id="update-modal-badge" class="status-badge badge-pending" style="font-size: 0.8rem; padding: 4px 10px;">IN CORSO</span>
+        </div>
+        
+        <div id="update-step-label" class="step-indicator">Inizializzazione procedura...</div>
+        
+        <div class="update-progress-bar-container">
+            <div id="update-progress-fill" class="update-progress-fill" style="width: 5%;"></div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-secondary); margin-bottom: 6px;">
+            <span id="update-status-detail">Sblocco RW -> apt update -> apt dist-upgrade -> Ripristino RO</span>
+            <span id="update-percent-label">5%</span>
+        </div>
+
+        <div id="update-terminal" class="terminal-box">In attesa dell'avvio della procedura apt...</div>
+
+        <div id="update-reboot-box" style="display:none; margin-top:12px; padding:10px; background: rgba(34, 197, 94, 0.1); border: 1px solid #16a34a; border-radius: 6px; font-size: 0.88rem; color: #86efac;">
+            ✔ Aggiornamento terminato! La scheda SD è stata ripristinata in <strong>Sola Lettura (RO)</strong>. È consigliato riavviare per applicare le modifiche del kernel e delle librerie.
+        </div>
+
+        <div class="modal-buttons" style="margin-top: 15px;">
+            <button id="btn-update-reboot" class="btn btn-primary" onclick="rebootAfterUpdate()" style="display: none;">Riavvia Ora</button>
+            <button id="btn-update-close" class="btn btn-secondary" onclick="closeUpdateModal()" disabled>Chiudi</button>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -179,6 +241,150 @@ function saveSettingsForm(e) {
     .catch(err => {
         showModal("Errore", "Errore di comunicazione durante il salvataggio.");
     });
+}
+
+// --- Filesystem RO / RW Toggle & OS Update ---
+let isRootRo = {{ 'true' if fs.root_ro else 'false' }};
+let updatePollTimer = null;
+
+function updateFsBadge(status) {
+    isRootRo = status.root_ro;
+    const badge = document.getElementById('fs-badge');
+    const badgeText = document.getElementById('fs-badge-text');
+    const toggleBtn = document.getElementById('btn-toggle-fs');
+
+    if (isRootRo) {
+        badge.className = 'status-badge badge-connected';
+        badgeText.innerText = 'SOLA LETTURA (SD Protetta)';
+        if (toggleBtn) toggleBtn.innerText = '🔓 Sblocca Temporaneamente in Scrittura (RW)';
+    } else {
+        badge.className = 'status-badge badge-pending';
+        badgeText.innerText = 'SCRITTURA (RW)';
+        if (toggleBtn) toggleBtn.innerText = '🔒 Blocca in Sola Lettura (RO)';
+    }
+}
+
+function toggleFsRemount() {
+    const targetMode = isRootRo ? 'rw' : 'ro';
+    const actionLabel = isRootRo ? 'sbloccare la scheda SD in modalità Scrittura (RW)' : 'ripristinare la modalità Sola Lettura (RO)';
+    
+    if (!confirm(`Sei sicuro di voler ${actionLabel}?`)) return;
+
+    fetch('/api/system/fs-remount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: targetMode })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success && data.fs) {
+            updateFsBadge(data.fs);
+            showModal("Filesystem", data.message);
+        } else {
+            showModal("Errore Filesystem", data.message || "Impossibile cambiare modalità mount.");
+        }
+    })
+    .catch(err => {
+        showModal("Errore", "Errore di rete durante il cambio modalità filesystem.");
+    });
+}
+
+function confirmStartOsUpdate() {
+    const msg = "Questa operazione eseguirà: \n\n" +
+                "1. Sblocco automatico in Scrittura (RW)\n" +
+                "2. 'apt update' e aggiornamento completo dei pacchetti Debian\n" +
+                "3. Pulizia cache e sincronizzazione disco (sync)\n" +
+                "4. Ripristino automatico e garantito della modalità Sola Lettura (RO)\n\n" +
+                "Vuoi procedere ora?";
+    if (!confirm(msg)) return;
+
+    // Show modal
+    document.getElementById('update-modal').style.display = 'flex';
+    document.getElementById('btn-update-close').disabled = true;
+    document.getElementById('btn-update-reboot').style.display = 'none';
+    document.getElementById('update-reboot-box').style.display = 'none';
+    document.getElementById('update-modal-badge').className = 'status-badge badge-pending';
+    document.getElementById('update-modal-badge').innerText = 'AVVIO...';
+    document.getElementById('update-terminal').innerText = 'Inizializzazione script aggiornamento...';
+
+    fetch('/api/system/update-os', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            document.getElementById('update-step-label').innerText = 'Errore avvio: ' + data.message;
+            document.getElementById('btn-update-close').disabled = false;
+            return;
+        }
+        // Start polling
+        if (updatePollTimer) clearInterval(updatePollTimer);
+        updatePollTimer = setInterval(pollOsUpdateStatus, 1500);
+    })
+    .catch(err => {
+        document.getElementById('update-step-label').innerText = 'Errore di connessione al server: ' + err;
+        document.getElementById('btn-update-close').disabled = false;
+    });
+}
+
+function pollOsUpdateStatus() {
+    fetch('/api/system/update-os/status')
+    .then(r => r.json())
+    .then(data => {
+        const fill = document.getElementById('update-progress-fill');
+        const percentLabel = document.getElementById('update-percent-label');
+        const stepLabel = document.getElementById('update-step-label');
+        const badge = document.getElementById('update-modal-badge');
+        const term = document.getElementById('update-terminal');
+
+        fill.style.width = (data.progress || 5) + '%';
+        percentLabel.innerText = (data.progress || 5) + '%';
+        stepLabel.innerText = data.step || 'In esecuzione...';
+
+        if (data.logs && data.logs.length > 0) {
+            term.innerText = data.logs.join('\n');
+            term.scrollTop = term.scrollHeight;
+        }
+
+        if (data.status === 'completed') {
+            clearInterval(updatePollTimer);
+            updatePollTimer = null;
+            badge.className = 'status-badge badge-connected';
+            badge.innerText = 'COMPLETATO';
+            document.getElementById('btn-update-close').disabled = false;
+            document.getElementById('update-reboot-box').style.display = 'block';
+            document.getElementById('btn-update-reboot').style.display = 'inline-block';
+            // Refresh fs badge
+            fetch('/api/system/fs-status').then(r => r.json()).then(fs => updateFsBadge(fs));
+        } else if (data.status === 'error') {
+            clearInterval(updatePollTimer);
+            updatePollTimer = null;
+            badge.className = 'status-badge badge-disconnected';
+            badge.innerText = 'ERRORE';
+            document.getElementById('btn-update-close').disabled = false;
+            // Refresh fs badge (since finally block restores RO)
+            fetch('/api/system/fs-status').then(r => r.json()).then(fs => updateFsBadge(fs));
+        }
+    })
+    .catch(err => {
+        console.error("Error polling update status:", err);
+    });
+}
+
+function closeUpdateModal() {
+    if (updatePollTimer) {
+        clearInterval(updatePollTimer);
+        updatePollTimer = null;
+    }
+    document.getElementById('update-modal').style.display = 'none';
+}
+
+function rebootAfterUpdate() {
+    if (confirm("Riavviare il thin client adesso per caricare i nuovi pacchetti?")) {
+        fetch('/api/system/reboot', { method: 'POST' })
+        .then(() => {
+            document.getElementById('update-step-label').innerText = 'Riavvio sistema in corso... Attendere circa 20 secondi.';
+            setTimeout(() => { window.location.href = '/'; }, 5000);
+        });
+    }
 }
 </script>
 {% endblock %}

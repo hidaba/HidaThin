@@ -13,6 +13,20 @@
 
 ---
 
+## Visual Overview
+
+### 🚀 Boot & Initialization Splash Screen
+Cyberpunk-styled boot overlay featuring real-time readiness checks (backend UI, network interfaces, Tailscale WireGuard mesh, and remote RDP host reachability):
+
+![HidaThin Boot & Startup Splash Screen](screen_splash_preview.png)
+
+### 🖥️ Main Kiosk Connection Dashboard
+Distraction-free, appliance-grade connection interface displaying live Wi-Fi and Tailscale status telemetry, target PC selector, and quick system controls:
+
+![HidaThin Main Kiosk Dashboard](screen_after_boot.png)
+
+---
+
 ## Key Features
 
 - **Direct Kiosk Boot (Zero Desktop Overhead)**: Boots straight into a full-screen, responsive interface via Openbox and Chromium kiosk mode with no desktop environment bloat.
@@ -254,6 +268,21 @@ Navigate to the **Wi-Fi** tab from the top navigation bar:
 - Scan for nearby 2.4 GHz and 5 GHz networks.
 - Click on an SSID, enter the WPA2/WPA3 passphrase (use the eye icon 👁 to verify), and click **Connetti**.
 - Corrupted or invalid NetworkManager profiles are automatically sanitized.
+
+### 5. Read-Only Filesystem & Appliance Protection (Soluzione B)
+To completely eliminate MicroSD card corruption caused by abrupt power loss:
+```bash
+sudo bash /opt/thinclient/scripts/setup-readonly-fs.sh
+```
+- **Read-Only Root & Boot**: Both `/` and `/boot/firmware` are mounted `ro`.
+- **Persistent `/data`**: NetworkManager Wi-Fi profiles, Tailscale auth states, and HidaThin configurations are bind-mounted to `/data`.
+- **RAM Disks (`tmpfs`)**: Temporary files and systemd logs are redirected to volatile RAM.
+
+### 6. Seamless Debian OS Updates via Web UI
+When running in Read-Only mode, system packages can be safely upgraded directly from **⚙ Impostazioni**:
+- Click **⚡ Aggiorna Sistema Operativo (Debian)**.
+- HidaThin temporarily unlocks the disk (`mount -o remount,rw /`), runs `apt update && apt dist-upgrade -y`, synchronizes physical storage (`sync`), and strictly relocks the filesystem back to **Read-Only (`ro`)** even if an error occurs.
+- Follow progress live via the integrated terminal console and reboot upon completion.
 
 ### 5. Remote Assistance (VNC Desktop Shadowing)
 Supervisors or IT support personnel can view and control the thin client display (both UI and RDP session):

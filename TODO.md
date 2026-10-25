@@ -34,11 +34,14 @@ Questo documento raccoglie le attività pianificate e le ottimizzazioni architet
 
 ## 🛡️ 2. Resilienza & Appliance Mode (Stateless)
 
-- [ ] **Filesystem Read-Only con OverlayFS (RAM Disk Mode)**
-  - *Obiettivo*: Rendere il thin client completamente immune alla corruzione della scheda SD in caso di spegnimento improvviso da interruttore, come fa WTware eseguendo l'immagine in RAM.
-  - *Task*:
-    - Abilitare OverlayFS nativo di Raspberry Pi OS (`raspi-config nonint enable_overlayfs`).
-    - Configurare cartelle persistenti solo per chiavi Tailscale e configurazioni (`/var/lib/tailscale`, `/opt/thinclient/config`).
+- [x] **Filesystem Read-Only con Partizione Persistente /data (Soluzione B)**
+  - *Obiettivo*: Rendere il thin client completamente immune alla corruzione della scheda SD da spegnimento improvviso, garantendo la persistenza delle impostazioni utente, password Wi-Fi e stato Tailscale.
+  - *Implementato*:
+    - Script automatico [`scripts/setup-readonly-fs.sh`](file:///y:/Progetti/thinclient/scripts/setup-readonly-fs.sh) (supporto partizione `/data`, tmpfs in RAM per `/tmp`, `/var/tmp`, `/var/log`, journaling volatile, e `--undo`).
+    - Bind-mount persistenti per `/opt/thinclient/config`, `/var/lib/tailscale` e `/etc/NetworkManager/system-connections`.
+    - Fallback automatico in Python per salvataggio su filesystem protetto (`save_settings` e `save_hosts_data`).
+    - Gestione aggiornamenti OS Debian: pulsante "⚡ Aggiorna Sistema Operativo (Debian)" nella pagina Impostazioni che rimonta automaticamente in RW, esegue `apt update` e `apt dist-upgrade` con streaming console in tempo reale, esegue il sync e ripristina garantito lo stato Read-Only (`ro`).
+    - Monitoraggio stato del Filesystem (RO/RW) visibile anche in Diagnostica e Impostazioni.
 
 - [ ] **Watchdog Hardware del Raspberry Pi**
   - *Task*: Abilitare il chip watchdog hardware (`bcm2835_wdt`) con `systemd` per riavviare automaticamente il thin client in caso di freeze del sistema.

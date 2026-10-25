@@ -11,7 +11,10 @@ from flask import Flask, render_template, request, jsonify
 
 from app.wifi import get_network_status, scan_wifi_networks, connect_wifi, forget_wifi
 from app.tailscale import get_tailscale_status, restart_tailscale, ping_host
-from app.system import get_settings, save_settings, get_system_metrics, reboot_system, poweroff_system
+from app.system import (
+    get_settings, save_settings, get_system_metrics, reboot_system, poweroff_system,
+    get_fs_status, remount_fs, start_os_update, get_os_update_status
+)
 from app.rdp import rdp_manager
 from app.vnc import get_vnc_status, save_vnc_settings, restart_vnc
 
@@ -49,12 +52,25 @@ def load_hosts_data():
     }
 
 def save_hosts_data(data):
-    """Writes hosts to config/hosts.yaml."""
+    """Writes hosts to config/hosts.yaml with auto-remount fallback if read-only."""
     try:
         os.makedirs(CONFIG_DIR, exist_ok=True)
         with open(HOSTS_FILE, "w") as f:
             yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
         return True, "Configurazione salvata con successo"
+    except OSError as e:
+        if getattr(e, 'errno', None) == 30 or "Read-only file system" in str(e):
+            logger.warning("Filesystem is Read-Only. Performing temporary remount RW to save hosts...")
+            remount_fs(ro=False)
+            try:
+                os.makedirs(CONFIG_DIR, exist_ok=True)
+                with open(HOSTS_FILE, "w") as f:
+                    yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+                return True, "Configurazione salvata con successo"
+            finally:
+                remount_fs(ro=True)
+        logger.error(f"Error saving hosts.yaml: {e}")
+        return False, str(e)
     except Exception as e:
         logger.error(f"Error saving hosts.yaml: {e}")
         return False, str(e)
@@ -88,7 +104,8 @@ def settings_page():
     settings = get_settings()
     metrics = get_system_metrics()
     vnc = get_vnc_status()
-    return render_template("settings.html", settings=settings, metrics=metrics, vnc=vnc)
+    fs = get_fs_status()
+    return render_template("settings.html", settings=settings, metrics=metrics, vnc=vnc, fs=fs)
 
 @app.route("/diagnostics")
 def diagnostics_page():
@@ -97,13 +114,15 @@ def diagnostics_page():
     metrics = get_system_metrics()
     data = load_hosts_data()
     vnc = get_vnc_status()
+    fs = get_fs_status()
     return render_template(
         "diagnostics.html",
         network=net,
         tailscale=ts,
         metrics=metrics,
         hosts=data.get("hosts", {}),
-        vnc=vnc
+        vnc=vnc,
+        fs=fs
     )
 
 # --- REST APIs ---
@@ -342,6 +361,27 @@ def api_system_reboot():
 def api_system_poweroff():
     success, msg = poweroff_system()
     return jsonify({"success": success, "message": msg})
+
+@app.route("/api/system/fs-status")
+def api_system_fs_status():
+    return jsonify(get_fs_status())
+
+@app.route("/api/system/fs-remount", methods=["POST"])
+def api_system_fs_remount():
+    req = request.get_json() or {}
+    mode = req.get("mode", "ro").lower()
+    ro = (mode == "ro")
+    success, msg = remount_fs(ro=ro)
+    return jsonify({"success": success, "message": msg, "fs": get_fs_status()})
+
+@app.route("/api/system/update-os", methods=["POST"])
+def api_system_update_os():
+    success, msg = start_os_update()
+    return jsonify({"success": success, "message": msg})
+
+@app.route("/api/system/update-os/status")
+def api_system_update_os_status():
+    return jsonify(get_os_update_status())
 
 @app.route("/api/tailscale/restart", methods=["POST"])
 def api_tailscale_restart():

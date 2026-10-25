@@ -47,6 +47,8 @@
                     <tr><td>Temperatura CPU:</td><td><strong>{{ metrics.temp }}</strong></td></tr>
                     <tr><td>Stato Throttling:</td><td><strong>{{ metrics.throttled.description }} ({{ metrics.throttled.raw }})</strong></td></tr>
                     <tr><td>Risoluzione Monitor:</td><td><strong>{{ metrics.resolution }}</strong></td></tr>
+                    <tr><td>Filesystem Root (/):</td><td><strong style="color: {% if fs.root_ro %}#4ade80{% else %}#f59e0b{% endif %};">{{ 'SOLA LETTURA (Protetto)' if fs.root_ro else 'SCRITTURA (RW)' }}</strong></td></tr>
+                    <tr><td>Partizione Dati (/data):</td><td><strong style="color: {% if fs.data_mounted %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ 'MONTATA (RW)' if fs.data_mounted else 'Non montata (Singola partizione)' }}</strong></td></tr>
                 </table>
             </div>
 
