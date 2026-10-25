@@ -5,6 +5,16 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.16] - 2026-10-25
+
+### Risolto e Perfezionato (Boot Read-Only & Appliance Mode)
+- **Eliminazione Definitiva Errori di Swap al Boot (`scripts/setup-readonly-fs.sh`, `/etc/rpi/swap.conf`)**:
+  - Rimozione preventiva del file residuo `/var/swap` su disco SD prima del mount RO e configurazione di `Mechanism=zram` per allocazione swap pura in RAM compressa.
+  - Mascherati definitivamente i servizi di gestione swap su MicroSD (`rpi-resize-swap-file`, `rpi-remove-swap-file@`, `rpi-setup-loop@var-swap`, `dphys-swapfile`) azzerando i messaggi di errore e i fallimenti al boot (`0 failed units`).
+- **Stabilizzazione Avvio Chromium & Xorg su Filesystem Read-Only (`scripts/xinitrc`, `systemd/thinclient-ui.service`)**:
+  - Reindirizzati i parametri `--user-data-dir` e `--disk-cache-dir` di Chromium su directory volatili in `/tmp` (tmpfs), risolvendo la schermata nera da crash continuo all'avvio.
+  - Reindirizzato il log del server grafico Xorg su `/tmp/Xorg.0.log` per evitare blocchi al momento del remount RO.
+
 ## [0.2.15] - 2026-10-25
 
 ### Aggiunto
@@ -19,14 +29,6 @@ e questo progetto segue il versionamento `0.2.x`.
   - Aggiunto wrapper `scripts/install.sh` per compatibilità da qualsiasi directory di esecuzione.
 - **Regola di Sviluppo in `GEMINI.md`**:
   - Registrata la regola vincolante di manutenzione per garantire che `install.sh` sia sempre tenuto aggiornato ad ogni modifica che coinvolge aggiunta, rimozione o variazione di file o dipendenze nel repository.
-
-### Risolto e Perfezionato (Boot Read-Only)
-- **Eliminazione Errori di Swap su Root Read-Only (`scripts/setup-readonly-fs.sh`)**:
-  - Rimozione preventiva del file `/var/swap` prima del mount RO e configurazione di `Mechanism=zram` in `/etc/rpi/swap.conf`.
-  - Mascherati i servizi di ridimensionamento swap su MicroSD (`rpi-resize-swap-file`, `rpi-remove-swap-file@`, `rpi-setup-loop@var-swap`, `dphys-swapfile`) per evitare blocchi e messaggi di errore durante il boot.
-- **Avvio Pulito Chromium & Xorg su Filesystem Read-Only (`scripts/xinitrc`, `systemd/thinclient-ui.service`)**:
-  - Reindirizzati i parametri `--user-data-dir` e `--disk-cache-dir` di Chromium su directory volatili in `/tmp` (tmpfs).
-  - Reindirizzato il log del server grafico Xorg su `/tmp/Xorg.0.log` per eliminare tentativi di scrittura su `/var/log`.
 
 
 
