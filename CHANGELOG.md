@@ -5,6 +5,22 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.15] - 2026-10-25
+
+### Aggiunto
+- **Installer One-Liner Automatizzato per Raspbian / Debian (`install.sh`, `scripts/install.sh`)**:
+  - Creato script di installazione rapida e chiavi in mano eseguibile direttamente tramite `curl -sSL https://raw.githubusercontent.com/hidaba/HidaThin/main/install.sh | sudo bash` o in locale con `sudo bash install.sh`.
+  - Installazione e configurazione automatizzata di tutti i pacchetti di sistema (Xorg, Openbox, Chromium kiosk, Python 3, Flask, FreeRDP 3, x11vnc, NetworkManager, wireless-tools).
+  - Installazione e abilitazione automatica di Tailscale WireGuard Mesh.
+  - Sincronizzazione / clonazione del repository in `/opt/thinclient` con corretta impostazione dei permessi utente e cartelle di log.
+  - Applicazione delle ottimizzazioni hardware: configurazione puntatore Xorg lineare 1:1 (`flat` profile), tuning frequenza di polling USB a 500 Hz (`usbhid.mousepoll=2`), allocazione memoria GPU a 128 MB (`gpu_mem=128`) e abbattimento usura MicroSD (`vm.swappiness=10`).
+  - Esecuzione automatica dello script di Fast Boot per mascherare i servizi di background bloccanti o non necessari.
+  - Registrazione, abilitazione all'avvio e avvio immediato dei servizi systemd (`thinclient.service`, `thinclient-ui.service`, `thinclient-vnc.service`, `cpu-governor.service`).
+  - Aggiunto wrapper `scripts/install.sh` per compatibilità da qualsiasi directory di esecuzione.
+- **Regola di Sviluppo in `GEMINI.md`**:
+  - Registrata la regola vincolante di manutenzione per garantire che `install.sh` sia sempre tenuto aggiornato ad ogni modifica che coinvolge aggiunta, rimozione o variazione di file o dipendenze nel repository.
+
+
 ## [0.2.14] - 2026-10-25
 
 ### Resilienza e Manutenzione

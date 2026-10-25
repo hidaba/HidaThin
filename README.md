@@ -103,7 +103,35 @@ Distraction-free, appliance-grade connection interface displaying live Wi-Fi and
 
 ## Installation & Setup
 
-### 1. Base OS Preparation & Core Packages
+### ⚡ Quick Automated Install (Recommended)
+
+Flash Raspberry Pi OS Lite (64-bit consigliato) sulla MicroSD, abilita SSH, connettiti al Raspberry Pi ed esegui il comando di installazione automatica:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/hidaba/HidaThin/main/install.sh | sudo bash
+```
+
+Lo script si occupa automaticamente di:
+- Aggiornare APT e installare tutti i pacchetti necessari (Xorg, Openbox, Chromium kiosk, Python 3, Flask, FreeRDP 3, VNC, NetworkManager).
+- Installare e avviare Tailscale WireGuard Mesh.
+- Distribuire il codice in `/opt/thinclient` con i corretti permessi.
+- Configurare le ottimizzazioni hardware: CPU governor `performance`, accelerazione puntatore lineare (`flat` profile), polling mouse USB a 500 Hz, allocazione GPU a 128 MB e tuning swappiness.
+- Applicare lo script di Fast-Boot per ridurre al minimo i tempi di avvio su MicroSD.
+- Installare e avviare tutti i servizi systemd (`thinclient.service`, `thinclient-ui.service`, `thinclient-vnc.service`, `cpu-governor.service`).
+
+Una volta terminato, autentica Tailscale e riavvia:
+```bash
+sudo tailscale up --accept-routes
+sudo reboot
+```
+
+---
+
+### Manual Installation & Step-by-Step Setup
+
+Se preferisci eseguire l'installazione manualmente passo dopo passo:
+
+#### 1. Base OS Preparation & Core Packages
 
 Flash Raspberry Pi OS Lite onto your MicroSD card using Raspberry Pi Imager. Enable SSH and set your initial user credentials.
 
@@ -305,6 +333,7 @@ Access the **Diagnostica** tab to inspect:
 
 ```text
 /opt/thinclient/
+├── install.sh           # Automated single-command setup script for Raspbian/Debian
 ├── app/
 │   ├── main.py          # Flask REST API and HTTP route handlers
 │   ├── rdp.py           # FreeRDP 3 session execution and process management
@@ -319,6 +348,9 @@ Access the **Diagnostica** tab to inspect:
 │   ├── settings.yaml    # RDP performance profiles and VNC preferences
 │   └── thinclient.logrotate # Logrotate configuration for session logs
 ├── scripts/
+│   ├── install.sh       # Wrapper for the root installer
+│   ├── optimize-boot.sh # Aggressive systemd service pruning for ultra-fast boot
+│   ├── setup-readonly-fs.sh # Soluzione B: Read-Only root + persistent /data
 │   ├── xinitrc          # X11 kiosk initialization (Openbox + Chromium)
 │   └── x11vnc-start.sh  # x11vnc watchdog with Tailscale-only binding
 ├── static/

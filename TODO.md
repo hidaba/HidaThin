@@ -34,6 +34,10 @@ Questo documento raccoglie le attività pianificate e le ottimizzazioni architet
 
 ## 🛡️ 2. Resilienza & Appliance Mode (Stateless)
 
+- [x] **Installer One-Liner Automatizzato (`install.sh` / `scripts/install.sh`)**
+  - *Obiettivo*: Setup completo della macchina da zero su Raspberry Pi OS Lite con un singolo comando `curl -sSL ... | sudo bash`.
+  - *Implementato*: Script unificato che gestisce dipendenze APT, browser Chromium Kiosk, FreeRDP 3, VNC, Tailscale Mesh VPN, ottimizzazioni kernel/hardware (polling mouse 500Hz, memoria GPU 128MB, accelerazione Xorg 1:1 flat, tuning swappiness a 10), script di fast-boot e registrazione/avvio dei servizi systemd. Regola di manutenzione registrata in `GEMINI.md`.
+
 - [x] **Filesystem Read-Only con Partizione Persistente /data (Soluzione B)**
   - *Obiettivo*: Rendere il thin client completamente immune alla corruzione della scheda SD da spegnimento improvviso, garantendo la persistenza delle impostazioni utente, password Wi-Fi e stato Tailscale.
   - *Implementato*:
