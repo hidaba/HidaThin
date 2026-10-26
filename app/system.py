@@ -37,7 +37,8 @@ DEFAULT_SETTINGS = {
         "mode": "dashboard",              # dashboard | direct_rdp
         "connect_timeout_seconds": 20,
         "max_initial_attempts": 1,
-        "fallback_to_dashboard": True
+        "fallback_to_dashboard": True,
+        "splash_min_duration_seconds": 2
     }
 }
 
@@ -102,6 +103,13 @@ def validate_settings(settings):
                     return False, "connect_timeout_seconds deve essere compreso tra 1 e 300."
             except (ValueError, TypeError):
                 return False, "connect_timeout_seconds deve essere numerico."
+        if "splash_min_duration_seconds" in st:
+            try:
+                smd = float(st["splash_min_duration_seconds"])
+                if smd < 0 or smd > 60:
+                    return False, "splash_min_duration_seconds deve essere compreso tra 0 e 60."
+            except (ValueError, TypeError):
+                return False, "splash_min_duration_seconds deve essere numerico."
 
     return True, ""
 

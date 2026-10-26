@@ -188,6 +188,7 @@ def _refresh_system_status():
             "network": net,
             "tailscale": ts,
             "vnc": vnc,
+            "startup": get_settings().get("startup", {}),
             "default_host": {
                 "key": default_key,
                 "name": host_info.get("name") if host_info else None,
@@ -249,7 +250,8 @@ def index():
     return render_template(
         "index.html",
         hosts=data.get("hosts", {}),
-        default_host=data.get("default_host", "pc-mimmo")
+        default_host=data.get("default_host", "pc-mimmo"),
+        startup_settings=get_settings().get("startup", {})
     )
 
 @app.route("/wifi")
@@ -262,7 +264,8 @@ def hosts_page():
     return render_template(
         "hosts.html",
         hosts=data.get("hosts", {}),
-        default_host=data.get("default_host", "pc-mimmo")
+        default_host=data.get("default_host", "pc-mimmo"),
+        startup_settings=get_settings().get("startup", {})
     )
 
 @app.route("/settings")

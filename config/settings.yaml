@@ -20,4 +20,5 @@ startup:
   connect_timeout_seconds: 20
   max_initial_attempts: 1
   fallback_to_dashboard: true
+  splash_min_duration_seconds: 2
 

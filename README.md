@@ -142,7 +142,7 @@ Boot the Raspberry Pi, connect via SSH, and install system dependencies:
 sudo apt update && sudo apt upgrade -y
 
 # Xorg, Openbox, and Chromium kiosk dependencies
-sudo apt install -y xorg xinit openbox chromium-browser x11-xserver-utils xterm
+sudo apt install -y xorg xinit openbox chromium-browser x11-xserver-utils xterm feh
 
 # Python 3, Flask, YAML, and Tkinter (required for Hot-Corner OSD)
 sudo apt install -y python3 python3-pip python3-flask python3-yaml python3-tk
@@ -262,6 +262,7 @@ startup:
   connect_timeout_seconds: 20
   max_initial_attempts: 1
   fallback_to_dashboard: true
+  splash_min_duration_seconds: 2  # Dwell time per le 4 fasi di connessione nello splash (0 per istantaneo)
 ```
 
 Configure the VNC remote assistance password (required before starting VNC):
@@ -362,12 +363,13 @@ For dedicated fixed workstations, HidaThin can bypass Chromium Kiosk on boot and
     mode: "direct_rdp"
     connect_timeout_seconds: 20
     fallback_to_dashboard: true
+    splash_min_duration_seconds: 2  # Dwell time per le 4 fasi di connessione nello splash (0 per istantaneo)
   ```
 - At boot, the system waits for network and Tailscale, launches FreeRDP full-screen immediately.
 - If the remote PC is unreachable, authentication fails, or the session is voluntarily disconnected, the system automatically opens the Dashboard Kiosk without looping.
 
 ### 9. Automated Test Suite
-Run the regression test suite covering all 25 validation scenarios (T01 - T25):
+Run the regression test suite covering all 27 validation scenarios (T01 - T27):
 ```bash
 python3 -m pytest tests/ -v
 ```

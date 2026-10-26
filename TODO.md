@@ -23,8 +23,9 @@ Questo documento raccoglie le attività pianificate e le ottimizzazioni architet
   - *Servizi mascherati*: `apt-daily` & `apt-daily-upgrade` (timers/services), `man-db` (timer/service), `cups` & `cups-browsed`, `avahi-daemon`, `ModemManager`, `triggerhappy`, `plymouth`, `bluetooth` & `hciuart`, `systemd-udev-settle`, `systemd-time-wait-sync`, `e2scrub`.
   - *Guadagno*: **-2 / 3 secondi** e azzeramento del blocco I/O su MicroSD al boot.
 
-- [ ] **Ottimizzazione Kernel & Storage I/O**
-  - *Task*:
+- [x] **Ottimizzazione Kernel & Storage I/O (Silent Boot & Fast Boot)**
+  - *Implementato*: Aggiunti parametri di silent boot in /boot/firmware/cmdline.txt (quiet loglevel=3 logo.nologo consoleblank=0 vt.global_cursor_default=0) e disable_splash=1 in config.txt per eliminare del tutto le scritte console, warning e cursore lampeggiante all'avvio prima di X11. Reindirizzati stdout/stderr di 	hinclient-ui.service su journal systemd per sopprimere warning e cursore di Xorg.
+  - *Attività residue*:
     - Aggiungere parametri di boot veloci in `/boot/firmware/cmdline.txt`: `quiet loglevel=0 fastboot noswap fsck.mode=skip`.
     - Testare l'overclock del bus MicroSD in `/boot/firmware/config.txt`: `dtparam=sd_overclock=100` (per schede SD A1/A2).
     - Valutare opzioni di mount `noatime,nodiratime,commit=60` per la partizione root.

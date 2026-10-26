@@ -9,8 +9,14 @@ xset -dpms
 # Set 1:1 linear pointer acceleration in X11 (disable legacy acceleration curves)
 xset m 1 1
 
-# Set seamless dark background matching UI theme
-xsetroot -solid "#0f172a" &
+# Set seamless splash background immediately on X11 root window to eliminate black screen
+SPLASH_IMG="/opt/thinclient/static/img/cyberpunk_splash.jpg"
+[ -f "$SPLASH_IMG" ] || SPLASH_IMG="$(cd "$(dirname "$0")/.." && pwd)/static/img/cyberpunk_splash.jpg"
+if command -v feh >/dev/null 2>&1 && [ -f "$SPLASH_IMG" ]; then
+    feh --bg-fill "$SPLASH_IMG" &
+else
+    xsetroot -solid "#0f172a" &
+fi
 
 # Start Openbox window manager
 openbox &
@@ -67,6 +73,7 @@ while true; do
             --disable-translate \
             --lang=it \
             --no-first-run \
+            --log-level=3 \
             --disable-features=Translate,TranslateUI,TranslateModel \
             --disable-sync \
             --disable-background-networking \

@@ -103,3 +103,44 @@ def test_t15_blocked_subprocesses_healthz_still_responsive(test_client):
         assert elapsed < 0.2
         data = res.get_json()
         assert data["status"] == "ok"
+
+def test_t26_splash_connection_phases_and_settings(test_client):
+    """
+    T26: Verifica che lo splash screen visualizzi le fasi di connessione (Motore Kiosk, Rete, Tailscale, RDP)
+    e che supporti la configurazione splash_min_duration_seconds da settings.yaml.
+    """
+    res = test_client.get("/")
+    assert res.status_code == 200
+    html = res.data.decode("utf-8")
+
+    # Tutti i 4 step devono essere presenti nella UI
+    assert 'id="boot-step-system"' in html
+    assert 'id="boot-step-network"' in html
+    assert 'id="boot-step-tailscale"' in html
+    assert 'id="boot-step-rdp"' in html
+
+    # Funzioni di progressione e gestione durata minima
+    assert "function updateStep(stepNum, data)" in html
+    assert "minDurationSec" in html
+    assert "splash_min_duration_seconds" in html
+
+def test_t27_silent_boot_service_and_xinitrc():
+    """
+    T27: Verifica configurazione Quiet/Silent Boot in thinclient-ui.service e scripts/xinitrc
+    per evitare messaggi di avvio e warning di X sulla console fisica.
+    """
+    service_path = os.path.join(r"Y:\Progetti\thinclient", "systemd", "thinclient-ui.service")
+    with open(service_path, "r", encoding="utf-8") as f:
+        service_content = f.read()
+
+    assert "StandardOutput=journal" in service_content
+    assert "StandardError=journal" in service_content
+    assert "-nocursor" in service_content
+    assert "-logverbose 0" in service_content
+
+    xinitrc_path = os.path.join(r"Y:\Progetti\thinclient", "scripts", "xinitrc")
+    with open(xinitrc_path, "r", encoding="utf-8") as f:
+        xinitrc_content = f.read()
+
+    assert "feh --bg-fill" in xinitrc_content
+    assert "--log-level=3" in xinitrc_content

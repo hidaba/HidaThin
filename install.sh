@@ -94,6 +94,7 @@ PACKAGES_CORE=(
     iproute2
     git
     wireless-tools
+    feh
 )
 
 echo -e "      Installazione pacchetti base..."
@@ -215,6 +216,7 @@ startup:
   connect_timeout_seconds: 20
   max_initial_attempts: 1
   fallback_to_dashboard: true
+  splash_min_duration_seconds: 2
 EOF
     fi
 fi
@@ -272,6 +274,10 @@ if [ -n "$CONFIG_TXT" ]; then
         echo "gpu_mem=128" >> "$CONFIG_TXT"
         echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto gpu_mem=128."
     fi
+    if ! grep -q "^disable_splash=" "$CONFIG_TXT"; then
+        echo "disable_splash=1" >> "$CONFIG_TXT"
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto disable_splash=1 (disabilita arcobaleno GPU)."
+    fi
 fi
 
 # E. Raspberry Pi Mouse Polling Rate (500 Hz -> usbhid.mousepoll=2)
@@ -289,6 +295,21 @@ if [ -n "$CMDLINE_TXT" ]; then
         echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: aggiunto usbhid.mousepoll=2 (polling mouse a 500 Hz)."
     else
         echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: usbhid.mousepoll già configurato."
+    fi
+
+    # F. Raspberry Pi Quiet Boot (suppress kernel & systemd console warnings)
+    BOOT_PARAMS="quiet loglevel=3 logo.nologo consoleblank=0 vt.global_cursor_default=0"
+    MODIFIED_PARAMS=false
+    for param in $BOOT_PARAMS; do
+        if ! grep -q "\b$param\b" "$CMDLINE_TXT"; then
+            sed -i "s/$/ $param/" "$CMDLINE_TXT"
+            MODIFIED_PARAMS=true
+        fi
+    done
+    if [ "$MODIFIED_PARAMS" = true ]; then
+        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: abilitato Silent Boot (quiet, loglevel=3, cursore console nascosto)."
+    else
+        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: Silent Boot già configurato."
     fi
 fi
 

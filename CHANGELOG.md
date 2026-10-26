@@ -5,6 +5,28 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.18] - 2026-10-26
+
+### Esperienza Utente & Avvio Grafico (Silent Boot & Splash Screen)
+- **Avvio Silenzioso di Xorg e Soppressione Warning Console (`systemd/thinclient-ui.service`, `scripts/xinitrc`)**:
+  - Reindirizzati `StandardOutput` e `StandardError` su `journal` in `thinclient-ui.service`, impedendo a `xinit`, `Xorg`, script shell e Chromium di stampare scritte di caricamento o warning a video su `/dev/tty1`.
+  - Introdotti flag `-nocursor` e `-logverbose 0` nella riga di comando di Xorg per eliminare il puntatore nero grezzo a "X" e azzerare i log a console.
+  - Aggiunto flag `--log-level=3` all'avvio di Chromium Kiosk per sopprimere i warning su stderr.
+  - Configurazione automatica nel file `/boot/firmware/cmdline.txt` (`quiet loglevel=3 logo.nologo consoleblank=0 vt.global_cursor_default=0`) e `/boot/firmware/config.txt` (`disable_splash=1`) tramite `install.sh` per un boot silenzioso dall'accensione ad X11.
+- **Visualizzazione Immediata dello Sfondo Splash in X11 (`scripts/xinitrc`, `install.sh`)**:
+  - Integrato `feh --bg-fill` all'avvio di Openbox per impostare all'istante l'immagine di sfondo Cyberpunk sul root window X11, eliminando la schermata scura/vuota nei secondi di caricamento di Chromium.
+  - Aggiunto il pacchetto `feh` tra le dipendenze base in `install.sh`.
+- **Progressione Fluida delle Fasi di Connessione nello Splash (`templates/index.html`, `config/settings.yaml`, `app/system.py`)**:
+  - Implementata una sequenza fluida e cadenzata per mostrare le 4 fasi di stato prima della dashboard:
+    1. `[01/04] MOTORE KIOSK HIDATHIN` (Flask & X11)
+    2. `[02/04] CONNESSIONE DI RETE` (Wi-Fi con SSID/IP oppure Ethernet)
+    3. `[03/04] TUNNEL VPN TAILSCALE WIREGUARD` (Stato WireGuard e IP 100.x)
+    4. `[04/04] VERIFICA HOST RDP REMOTO` (Raggiungibilità porta 3389)
+  - Introdotto parametro configurabile `startup.splash_min_duration_seconds` (default: 2 secondi) per consentire all'utente di verificare visivamente i check di connessione prima del fade-out alla dashboard principale (oppure impostare `0` per l'avvio istantaneo).
+  - Comandi di recupero ("Configura Wi-Fi", "Apri Dashboard") sempre immediatamente cliccabili con interruzione istantanea dello splash.
+- **Test Automatizzati (`tests/test_boot_status.py`)**:
+  - Aggiunti test di regressione T26 (validazione delle fasi di connessione e supporto dwell time) e T27 (verifica configurazione Silent Boot su systemd e xinitrc).
+
 ## [0.2.17] - 2026-10-25
 
 ### Sicurezza (SEC-01 & SEC-02)
