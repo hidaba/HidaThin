@@ -8,6 +8,9 @@ e questo progetto segue il versionamento `0.2.x`.
 ## [0.2.19] - 2026-10-27
 
 ### Risolto
+- **Posizione Versione Software nel Footer (`templates/base.html`)**:
+  - Spostato il badge della versione dell'applicazione (`footer-version`) alla destra delle informazioni di rete e connessione Tailscale (`system-info-text`), posizionandolo dopo il Tailscale IP separato da un dot divider (`•`), migliorando la leggibilità complessiva della barra di stato inferiore.
+  - Aggiunto il test di regressione T28 in `tests/test_boot_status.py` per garantire l'ordine degli elementi nel footer.
 - **Ripristino Visibilità Cursore Mouse (`systemd/thinclient-ui.service`, `scripts/xinitrc`, `install.sh`)**:
   - Rimosso il flag distruttivo `-nocursor` dal comando di avvio di Xorg in `thinclient-ui.service`. In Xorg, il parametro `-nocursor` disabilita a livello globale il rendering dello sprite del puntatore per l'intera sessione (Chromium Kiosk, Openbox e FreeRDP), rendendo il mouse completamente invisibile all'utente.
   - Configurato il cursore predefinito in `scripts/xinitrc` tramite `xsetroot -cursor_name left_ptr`, eliminando alla radice l'antiquato puntatore a "X" della font root X11 e garantendo un puntatore a freccia standard e visibile fin dal caricamento dello splash screen.
