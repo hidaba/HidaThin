@@ -20,7 +20,7 @@ try {
         --exclude="*.pyc" `
         --exclude=".pytest_cache" `
         --exclude=".git" `
-        app scripts static systemd templates tests
+        app scripts static systemd templates tests install.sh CHANGELOG.md
     Pop-Location
 
     Write-Host "[2/4] Trasferimento archivio su thin client via SCP..." -ForegroundColor Yellow
@@ -32,7 +32,9 @@ set -e
 mount -o remount,rw /
 tar -xzf /tmp/thinclient-update.tar.gz -C /opt/thinclient
 rm -f /tmp/thinclient-update.tar.gz
+find /opt/thinclient -type f \( -name "*.sh" -o -name "xinitrc" -o -name "*.py" -o -name "*.service" -o -name "*.html" -o -name "*.yaml" \) -exec sed -i 's/\r$//' {} + 2>/dev/null || true
 chmod +x /opt/thinclient/scripts/* 2>/dev/null || true
+python3 -c "import yaml; p='/opt/thinclient/config/settings.yaml'; d=yaml.safe_load(open(p)) if open(p) else {}; d.setdefault('overscan','auto'); yaml.safe_dump(d, open(p,'w'))" 2>/dev/null || true
 sync
 echo "Aggiornamento applicato con successo su /opt/thinclient."
 '@
