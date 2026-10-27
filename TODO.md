@@ -4,7 +4,7 @@ Questo documento raccoglie le attività pianificate e le ottimizzazioni architet
 
 ---
 
-## ⚡ 1. Ottimizzazione Boot Speed (Ispirate da WTware)
+## ⚡ 1. Ottimizzazione Boot Speed
 
 - [x] **Modalità "Direct-to-RDP" / Auto-Connect (Bypass Browser)**
   - *Implementato*: Introdotta modalità configurabile `startup.mode: direct_rdp` in `settings.yaml` gestita dal coordinatore dedicato [`scripts/direct_rdp_coordinator.py`](file:///y:/Progetti/thinclient/scripts/direct_rdp_coordinator.py) e [`scripts/xinitrc`](file:///y:/Progetti/thinclient/scripts/xinitrc). All'avvio il coordinatore attende la disponibilità di rete e Tailscale ed effettua la connessione FreeRDP verso l'host predefinito lasciando inizialmente spento Chromium. In caso di errore, timeout o disconnessione, effettua un fallback pulito alla Dashboard Kiosk senza loop infiniti.
