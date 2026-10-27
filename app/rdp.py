@@ -26,6 +26,37 @@ FREERDP_ERROR_MESSAGES = {
     155: "Accesso negato: l'utente non dispone dei permessi per il Desktop Remoto su Windows.",
 }
 
+AUTH_ERROR_CODES = {12, 26, 131, 133, 134, 145, 148, 154, 155}
+AUTH_ERROR_KEYWORDS = [
+    "LOGON_FAILURE",
+    "AUTHENTICATION_FAILED",
+    "Authentication failure",
+    "Autenticazione fallita",
+    "Autenticazione NLA",
+    "ERRCONNECT_LOGON_FAILURE",
+    "ERRCONNECT_AUTHENTICATION_FAILED",
+    "STATUS_LOGON_FAILURE",
+    "check credentials",
+    "password errati",
+    "password Windows errata",
+    "password scaduta",
+    "0x00020009",
+    "0x00020014",
+    "0x00020015",
+    "SEC_E_LOGON_DENIED",
+]
+
+def is_auth_error(retcode, log_snippet=""):
+    """Determines whether a FreeRDP termination indicates credential/auth rejection."""
+    if retcode in AUTH_ERROR_CODES:
+        return True
+    if log_snippet:
+        snippet_lower = log_snippet.lower()
+        for kw in AUTH_ERROR_KEYWORDS:
+            if kw.lower() in snippet_lower:
+                return True
+    return False
+
 def get_freerdp_error_description(retcode):
     return FREERDP_ERROR_MESSAGES.get(retcode, f"Sessione terminata con errore (codice: {retcode})")
 
@@ -91,9 +122,12 @@ class RDPSession:
         self.process = None
         self.overlay_process = None
         self.log_file = None
+        self.log_filepath = None
         self.state = "CONNECTING"  # CONNECTING, CONNECTED, DISCONNECTING, ERROR, IDLE
         self.user_cancelled = False
         self.error_message = None
+        self.is_auth_error = False
+        self.exit_code = None
         self.start_mono = time.monotonic()
 
 class RDPManager:
@@ -106,6 +140,8 @@ class RDPManager:
         self.lock = threading.Lock()
         self.session_counter = 0
         self.last_error = None
+        self.last_is_auth_error = False
+        self.last_exit_code = None
 
     def _start_overlay(self, session):
         """Launches the lightweight Tkinter hot-corner overlay on DISPLAY=:0 for the session."""
@@ -160,12 +196,16 @@ class RDPManager:
                     "state": self.active_session.state,
                     "host": self.active_session.host_name,
                     "error": self.active_session.error_message or self.last_error,
+                    "is_auth_error": getattr(self.active_session, "is_auth_error", False),
+                    "exit_code": getattr(self.active_session, "exit_code", None),
                     "session_id": self.active_session.session_id
                 }
             return {
                 "state": "IDLE",
                 "host": None,
                 "error": self.last_error,
+                "is_auth_error": getattr(self, "last_is_auth_error", False),
+                "exit_code": getattr(self, "last_exit_code", None),
                 "session_id": None
             }
 
@@ -294,9 +334,12 @@ class RDPManager:
             session = RDPSession(session_id, host_entry, effective_user, target_address)
             self.active_session = session
             self.last_error = None
+            self.last_is_auth_error = False
+            self.last_exit_code = None
 
-            log_file, _ = open_runtime_log("rdp.log")
+            log_file, log_filepath = open_runtime_log("rdp.log")
             session.log_file = log_file
+            session.log_filepath = log_filepath
 
             try:
                 log_file.write(f"\n--- Nuova sessione RDP [ID: {session_id}] verso {session.host_name} ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
@@ -362,10 +405,15 @@ class RDPManager:
         coordinate_kiosk_browser("cont")
 
         with self.lock:
+            log_snippet = ""
             try:
                 if session.log_file and not session.log_file.closed:
                     session.log_file.write(f"\n--- Sessione RDP [ID: {session.session_id}] terminata con codice {retcode} ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
                     session.log_file.close()
+                if session.log_filepath and os.path.exists(session.log_filepath):
+                    with open(session.log_filepath, "r", errors="ignore") as lf:
+                        lines = lf.readlines()
+                        log_snippet = "".join(lines[-35:]) if lines else ""
             except Exception:
                 pass
 
@@ -373,14 +421,23 @@ class RDPManager:
             if self.active_session is session:
                 self.active_session = None
                 session.state = "IDLE"
+                session.exit_code = retcode
+                self.last_exit_code = retcode
                 if session.user_cancelled:
                     self.last_error = None
+                    session.is_auth_error = False
+                    self.last_is_auth_error = False
                 elif retcode not in (0, 130, 143):  # 130=SIGINT, 143=SIGTERM
                     session.error_message = get_freerdp_error_description(retcode)
                     self.last_error = session.error_message
-                    logger.warning(f"FreeRDP [Session {session.session_id}] exited with code {retcode}: {session.error_message}")
+                    is_auth = is_auth_error(retcode, log_snippet)
+                    session.is_auth_error = is_auth
+                    self.last_is_auth_error = is_auth
+                    logger.warning(f"FreeRDP [Session {session.session_id}] exited with code {retcode} (auth_error={is_auth}): {session.error_message}")
                 else:
                     self.last_error = None
+                    session.is_auth_error = False
+                    self.last_is_auth_error = False
             else:
                 logger.info(f"Old session {session.session_id} monitor completed; active session is {getattr(self.active_session, 'session_id', None)}")
 
@@ -388,9 +445,13 @@ class RDPManager:
         """Terminates the active RDP session and overlay cleanly."""
         with self.lock:
             session = self.active_session
+            self.last_error = None
+            self.last_is_auth_error = False
+            self.last_exit_code = None
             if session and session.process and session.process.poll() is None:
                 session.user_cancelled = True
                 session.state = "DISCONNECTING"
+                session.is_auth_error = False
                 self._stop_overlay(session)
                 coordinate_kiosk_browser("cont")
                 try:

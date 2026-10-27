@@ -371,6 +371,23 @@ def api_rdp_disconnect():
 def api_rdp_status():
     return jsonify(rdp_manager.get_status())
 
+@app.route("/api/rdp/reset-failed-credentials", methods=["POST"])
+def api_rdp_reset_failed_credentials():
+    req = request.get_json() or {}
+    host_key = req.get("host_key")
+    if not host_key:
+        return jsonify({"success": False, "message": "Chiave host mancante"}), 400
+
+    raw_data = load_hosts_data(include_passwords=True)
+    hosts = raw_data.get("hosts", {})
+    if host_key in hosts and "password" in hosts[host_key]:
+        del hosts[host_key]["password"]
+        save_hosts_data(raw_data)
+        logger.info(f"Cleared invalid password for host '{host_key}' after failed attempts.")
+        return jsonify({"success": True, "message": "Password non valida rimossa"})
+
+    return jsonify({"success": True})
+
 @app.route("/api/wifi/status")
 def api_wifi_status():
     return jsonify(get_network_status())
