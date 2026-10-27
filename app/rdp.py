@@ -11,11 +11,19 @@ logger = logging.getLogger("thinclient.rdp")
 
 FREERDP_ERROR_MESSAGES = {
     23: "Errore nei parametri di avvio FreeRDP (argomento riga di comando non valido).",
-    145: "Autenticazione NLA richiesta. Inserisci Nome Utente e Password nelle Opzioni di accesso Windows.",
-    134: "Autenticazione fallita: Nome Utente o Password errati.",
-    141: "Host remoto non raggiungibile: verifica che il PC sia acceso e che la porta 3389 sia accessibile.",
     133: "Negoziazione sicurezza fallita: il server richiede Autenticazione a livello di rete (NLA).",
+    134: "Autenticazione fallita: Nome Utente o Password errati.",
     136: "Inizializzazione grafica fallita: verifica la sessione del server X.",
+    140: "Impossibile risolvere il nome del PC remoto (errore DNS): verifica il nome host o specifica l'indirizzo IP.",
+    141: "Host remoto non raggiungibile: verifica che il PC sia acceso, connesso a Tailscale e che la porta 3389 sia accessibile.",
+    142: "Errore di connessione iniziale MCS al server RDP.",
+    143: "Connessione TLS/SSL fallita verso il server remoto.",
+    144: "Privilegi insufficienti per la connessione al PC remoto.",
+    145: "Autenticazione NLA richiesta. Inserisci Nome Utente e Password nelle Opzioni di accesso Windows.",
+    147: "Connessione di trasporto fallita verso il PC remoto.",
+    148: "La password dell'account Windows è scaduta.",
+    154: "Autenticazione fallita: password Windows errata.",
+    155: "Accesso negato: l'utente non dispone dei permessi per il Desktop Remoto su Windows.",
 }
 
 def get_freerdp_error_description(retcode):
@@ -194,8 +202,23 @@ class RDPManager:
             sound_enabled = settings.get("sound", True)
             fullscreen = settings.get("fullscreen", True)
 
-            # Target host: prioritize hostname (MagicDNS), fallback to ip
-            target_address = host_entry.get("hostname") or host_entry.get("ip")
+            # Target host: prioritize IP if present to prevent DNS failures; auto-resolve via Tailscale peers if needed
+            target_ip = (host_entry.get("ip") or "").strip()
+            target_host = (host_entry.get("hostname") or "").strip()
+            target_address = target_ip or target_host
+
+            if not target_ip and target_host:
+                try:
+                    from app.tailscale import get_tailscale_status
+                    ts = get_tailscale_status(force=False)
+                    for peer in ts.get("peers", []):
+                        if peer.get("hostname") == target_host or peer.get("dns_name") == target_host:
+                            if peer.get("ip"):
+                                target_address = peer.get("ip")
+                                logger.info(f"Auto-resolved '{target_host}' to Tailscale IP '{target_address}'")
+                                break
+                except Exception as te:
+                    logger.debug(f"Could not auto-resolve peer IP for {target_host}: {te}")
             port = str(host_entry.get("port", 3389))
             if port and port != "3389":
                 target_address = f"{target_address}:{port}"

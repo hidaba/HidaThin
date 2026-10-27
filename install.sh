@@ -198,6 +198,7 @@ if [ ! -f "$INSTALL_DIR/config/settings.yaml" ]; then
 version: 1
 profile: "balanced"
 resolution: "auto"
+overscan: "auto"
 color_depth: 24
 sound: true
 auto_reconnect: true
@@ -278,6 +279,10 @@ if [ -n "$CONFIG_TXT" ]; then
     if ! grep -q "^disable_splash=" "$CONFIG_TXT"; then
         echo "disable_splash=1" >> "$CONFIG_TXT"
         echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto disable_splash=1 (disabilita arcobaleno GPU)."
+    fi
+    if ! grep -q "^disable_overscan=" "$CONFIG_TXT"; then
+        echo "disable_overscan=1" >> "$CONFIG_TXT"
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto disable_overscan=1 (disabilita overscan firmware per gestione KMS)."
     fi
 fi
 

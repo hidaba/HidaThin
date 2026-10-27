@@ -16,7 +16,8 @@ from app.wifi import get_network_status, scan_wifi_networks, connect_wifi, forge
 from app.tailscale import get_tailscale_status, restart_tailscale, ping_host
 from app.system import (
     get_settings, save_settings, get_system_metrics, reboot_system, poweroff_system,
-    get_fs_status, remount_fs, start_os_update, get_os_update_status, write_secure_yaml
+    get_fs_status, remount_fs, start_os_update, get_os_update_status, write_secure_yaml,
+    apply_overscan, VALID_OVERSCAN_MODES
 )
 from app.rdp import rdp_manager
 from app.vnc import get_vnc_status, save_vnc_settings, restart_vnc
@@ -476,6 +477,16 @@ def api_settings_save():
     req = request.get_json() or {}
     success, msg = save_settings(req)
     return jsonify({"success": success, "message": msg})
+
+@app.route("/api/system/overscan/apply", methods=["POST"])
+def api_system_overscan_apply():
+    req = request.get_json() or {}
+    mode = req.get("mode", "auto")
+    if mode not in VALID_OVERSCAN_MODES:
+        return jsonify({"success": False, "message": f"Modalità non valida: {mode}"}), 400
+    success, msg = apply_overscan(mode)
+    return jsonify({"success": success, "message": msg})
+
 
 @app.route("/api/system/reboot", methods=["POST"])
 def api_system_reboot():

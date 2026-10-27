@@ -9,6 +9,12 @@ xset -dpms
 # Set 1:1 linear pointer acceleration in X11 (disable legacy acceleration curves)
 xset m 1 1
 
+# Apply display overscan and edge correction (KMS underscan) based on settings.yaml
+echo "[xinitrc] Applying display overscan and edge correction..."
+TC_DIR="/opt/thinclient"
+[ -d "$TC_DIR/app" ] || TC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHONPATH="$TC_DIR" python3 -c "from app.system import apply_overscan; apply_overscan()" 2>/dev/null || true
+
 # Set standard left pointer cursor to eliminate the default raw X11 'X' font cursor
 xsetroot -cursor_name left_ptr &
 

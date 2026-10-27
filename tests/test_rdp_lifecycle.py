@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.rdp import RDPManager, RDPSession
+from app.rdp import RDPManager, RDPSession, get_freerdp_error_description
 import scripts.direct_rdp_coordinator as coord
 
 def test_t16_old_session_cleanup_does_not_affect_new_session():
@@ -111,3 +111,60 @@ def test_t24_direct_to_rdp_coordinator_fallback():
          patch("scripts.direct_rdp_coordinator.wait_for_connectivity", return_value=(False, {"default_host": {"key": "pc1"}})):
         rc = coord.main()
         assert rc == 1
+
+
+def test_t29_rdp_target_ip_resolution_and_error_codes():
+    """
+    T29: Risoluzione IP target RDP e mapping codici di errore FreeRDP.
+    Verifica:
+    1. Se l'host ha sia hostname che IP, connect usa l'IP (previene errore DNS 140).
+    2. Se l'host ha solo hostname, connect risolve l'IP dai peer Tailscale se presente.
+    3. Il codice di errore 140 (DNS not found) restituisce messaggio descrittivo anziché generico.
+    """
+    # 1. Error description tests
+    assert "DNS" in get_freerdp_error_description(140)
+    assert "password Windows errata" in get_freerdp_error_description(154)
+    assert "permessi" in get_freerdp_error_description(155)
+
+    manager = RDPManager()
+
+    # 2. IP prioritization: host has both hostname and ip
+    with patch("subprocess.Popen") as mock_popen, \
+         patch("shutil.which", return_value="/usr/bin/xfreerdp3"):
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_popen.return_value = mock_proc
+
+        host_with_ip = {"name": "PC Studio", "hostname": "pc-studio", "ip": "100.64.0.1", "port": 3389}
+        ok, msg = manager.connect(host_with_ip)
+        assert ok is True
+
+        cmd_args = mock_popen.call_args_list[0][0][0]
+        # Must target /v:100.64.0.1 not /v:pc-studio
+        assert "/v:100.64.0.1" in cmd_args
+
+        manager.disconnect()
+
+    # 3. Auto-resolve hostname via Tailscale peers if IP omitted
+    with patch("subprocess.Popen") as mock_popen, \
+         patch("shutil.which", return_value="/usr/bin/xfreerdp3"), \
+         patch("app.tailscale.get_tailscale_status", return_value={
+             "connected": True,
+             "peers": [{"hostname": "pc-remote", "ip": "100.64.0.50"}]
+         }):
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_popen.return_value = mock_proc
+
+        host_without_ip = {"name": "PC Remote", "hostname": "pc-remote"}
+        ok, msg = manager.connect(host_without_ip)
+        assert ok is True
+
+        cmd_args = mock_popen.call_args_list[0][0][0]
+        assert "/v:100.64.0.50" in cmd_args
+
+        manager.disconnect()

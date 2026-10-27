@@ -45,6 +45,24 @@
                 </div>
             </div>
 
+            <div class="form-row-2" style="margin-top: 15px;">
+                <div class="form-group">
+                    <label for="setting-overscan"><strong>Compensazione Bordi / Overscan TV:</strong></label>
+                    <select id="setting-overscan" class="input-text" onchange="previewOverscan(this.value)">
+                        <option value="none" {% if settings.overscan == 'none' %}selected{% endif %}>Disattivata (1:1 standard per monitor PC)</option>
+                        <option value="auto" {% if not settings.overscan or settings.overscan == 'auto' %}selected{% endif %}>Automatica (Rilevamento EDID HDMI)</option>
+                        <option value="light" {% if settings.overscan == 'light' %}selected{% endif %}>Leggera (~2.5% margini - TV con zoom lieve)</option>
+                        <option value="medium" {% if settings.overscan == 'medium' %}selected{% endif %}>Marcata (~5% margini - TV standard)</option>
+                    </select>
+                    <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
+                        Evita che i bordi escano dallo schermo quando il thin client è collegato a TV o schermi HDMI.
+                    </small>
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
+                    <div id="overscan-preview-status" style="font-size: 0.85rem; color: #60a5fa; min-height: 22px;"></div>
+                </div>
+            </div>
+
             <div class="form-row-2" style="margin-top: 10px;">
                 <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="setting-sound" style="transform:scale(1.3);" {% if settings.sound %}checked{% endif %}>
@@ -185,6 +203,31 @@
 
 {% block scripts %}
 <script>
+function previewOverscan(val) {
+    const statusElem = document.getElementById('overscan-preview-status');
+    if (statusElem) statusElem.textContent = "Applicazione anteprima schermo in corso...";
+    fetch('/api/system/overscan/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: val })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (statusElem) {
+            if (data.success) {
+                statusElem.textContent = "Anteprima applicata allo schermo attivo.";
+                setTimeout(() => { if (statusElem) statusElem.textContent = ""; }, 3000);
+            } else {
+                statusElem.textContent = "Avviso: " + data.message;
+            }
+        }
+    })
+    .catch(err => {
+        if (statusElem) statusElem.textContent = "";
+        console.error("Preview overscan error:", err);
+    });
+}
+
 function toggleVncFields() {
     const enabled = document.getElementById('setting-vnc-enabled').checked;
     const box = document.getElementById('vnc-details-box');
@@ -198,6 +241,7 @@ function saveSettingsForm(e) {
     const rdpPayload = {
         profile: document.getElementById('setting-profile').value,
         resolution: document.getElementById('setting-resolution').value,
+        overscan: document.getElementById('setting-overscan').value,
         color_depth: parseInt(document.getElementById('setting-bpp').value) || 24,
         sound: document.getElementById('setting-sound').checked,
         auto_reconnect: document.getElementById('setting-reconnect').checked,

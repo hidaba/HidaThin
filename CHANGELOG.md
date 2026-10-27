@@ -5,6 +5,22 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.20] - 2026-10-27
+
+### Aggiunto
+- **Compensazione Automatica Bordi / Overscan TV (`app/system.py`, `app/main.py`, `scripts/xinitrc`, `templates/settings.html`, `templates/diagnostics.html`)**:
+  - Implementato il supporto nativo per la correzione dell'overscan HDMI (bordi dell'interfaccia tagliati su TV e monitor multimediali) tramite proprietà DRM hardware underscan (`vc4-kms-v3d`).
+  - Introdotta la nuova opzione di configurazione `overscan` in `settings.yaml` con 4 modalità selezionabili:
+    - `none`: Nessuna compensazione (mappatura 1:1 pixel-perfect per monitor PC da ufficio).
+    - `auto`: Rilevamento automatico basato sui flag EDID/CEA dello schermo connesso.
+    - `light`: Compensazione leggera (~2.5% margini hardware: 24px orizzontale, 16px verticale).
+    - `medium`: Compensazione marcata (~5% margini hardware: 48px orizzontale, 32px verticale per televisori tradizionali).
+  - Aggiunto hook di avvio in `scripts/xinitrc` per applicare automaticamente l'underscan configurato su tutte le uscite video attive durante l'inizializzazione del server X11.
+  - Aggiunto endpoint REST `/api/system/overscan/apply` con anteprima dinamica in tempo reale nella pagina Impostazioni: il cambio modalità dal menu a tendina aggiorna immediatamente lo schermo connesso senza richiedere riavvio.
+  - Aggiornato `templates/diagnostics.html` con indicatore dedicato dello stato overscan attivo.
+  - Aggiornato `install.sh` per includere `overscan: "auto"` nel template di configurazione default e disabilitare l'overscan firmware legacy in `config.txt` (`disable_overscan=1`) a favore del controllo dinamico KMS.
+  - Aggiunti test automatizzati di validazione schema e comandi xrandr (T26, T27, T28) in `tests/test_updater_settings.py` e controllo accessi in `tests/test_sec.py`.
+
 ## [0.2.19] - 2026-10-27
 
 ### Risolto

@@ -131,6 +131,14 @@ def test_t02_remote_admin_call_rejected_without_auth(client):
     )
     assert res.status_code == 401
 
+    # Remote call to overscan apply without token -> 401
+    res_os = client.post(
+        "/api/system/overscan/apply",
+        environ_base={"REMOTE_ADDR": "192.168.1.50"},
+        json={"mode": "light"}
+    )
+    assert res_os.status_code == 401
+
     # Local kiosk call (127.0.0.1) -> Allowed without token
     res = client.post(
         "/api/hosts/save",

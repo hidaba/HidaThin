@@ -121,3 +121,99 @@ def test_t25_partial_settings_save_and_schema_validation(tmp_path, monkeypatch):
     ok_port, msg_port = save_settings({"vnc": {"port": 999999}})
     assert ok_port is False
     assert "Porta VNC non valida" in msg_port
+
+
+def test_t26_overscan_schema_validation(tmp_path, monkeypatch):
+    """
+    T26: Validazione schema per la configurazione overscan.
+    """
+    settings_file = tmp_path / "settings.yaml"
+    monkeypatch.setattr("app.system.SETTINGS_FILE", str(settings_file))
+
+    for mode in ["none", "auto", "light", "medium"]:
+        ok, msg = save_settings({"overscan": mode})
+        assert ok is True
+        assert get_settings()["overscan"] == mode
+
+    ok_inv, msg_inv = save_settings({"overscan": "invalid_overscan"})
+    assert ok_inv is False
+    assert "Modalità overscan non valida" in msg_inv
+
+
+def test_t27_apply_overscan():
+    """
+    T27: Applicazione hardware underscan via xrandr.
+    """
+    from app.system import apply_overscan
+
+    # 1. xrandr not available
+    with patch("shutil.which", return_value=None):
+        ok, msg = apply_overscan("auto")
+        assert ok is False
+        assert "non disponibile" in msg
+
+    # 2. xrandr available with DRM underscan support
+    sample_xrandr_prop = """Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 7680 x 7680
+HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 527mm x 296mm
+\tEDID:
+\t\t00ffffffffffff00...
+\tunderscan: auto
+\t\tsupported: off, on, auto
+\tunderscan vborder: 0
+\t\trange: (0, 128)
+\tunderscan hborder: 0
+\t\trange: (0, 128)
+HDMI-2 disconnected (normal left inverted right x axis y axis)
+"""
+
+    mock_res_prop = MagicMock(returncode=0, stdout=sample_xrandr_prop)
+    mock_res_set = MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch("shutil.which", return_value="/usr/bin/xrandr"), \
+         patch("subprocess.run") as mock_subproc:
+
+        mock_subproc.side_effect = [mock_res_prop, mock_res_set]
+        ok, msg = apply_overscan("light")
+        assert ok is True
+        assert "HDMI-1: light" in msg
+
+        # Verify xrandr command arguments
+        set_call = mock_subproc.call_args_list[1][0][0]
+        assert set_call == [
+            "xrandr", "--output", "HDMI-1",
+            "--set", "underscan", "on",
+            "--set", "underscan hborder", "24",
+            "--set", "underscan vborder", "16"
+        ]
+
+    # 3. Test mode 'none'
+    with patch("shutil.which", return_value="/usr/bin/xrandr"), \
+         patch("subprocess.run") as mock_subproc:
+
+        mock_subproc.side_effect = [mock_res_prop, mock_res_set]
+        ok, msg = apply_overscan("none")
+        assert ok is True
+        set_call = mock_subproc.call_args_list[1][0][0]
+        assert set_call == [
+            "xrandr", "--output", "HDMI-1",
+            "--set", "underscan", "off",
+            "--set", "underscan hborder", "0",
+            "--set", "underscan vborder", "0"
+        ]
+
+
+def test_t28_overscan_api_endpoint():
+    """
+    T28: Endpoint API per applicazione immediata overscan.
+    """
+    from app.main import app
+    client = app.test_client()
+
+    with patch("app.main.apply_overscan", return_value=(True, "Applicato a: HDMI-1: light")):
+        res = client.post("/api/system/overscan/apply", json={"mode": "light"})
+        assert res.status_code == 200
+        assert res.get_json()["success"] is True
+
+    res_inv = client.post("/api/system/overscan/apply", json={"mode": "not_valid"})
+    assert res_inv.status_code == 400
+    assert res_inv.get_json()["success"] is False

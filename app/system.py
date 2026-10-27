@@ -17,6 +17,7 @@ DEFAULT_SETTINGS = {
     "version": 1,
     "profile": "balanced",
     "resolution": "auto",
+    "overscan": "auto",
     "color_depth": 24,
     "sound": True,
     "auto_reconnect": True,
@@ -45,6 +46,14 @@ DEFAULT_SETTINGS = {
 VALID_PROFILES = {"performance", "balanced", "quality"}
 VALID_COLOR_DEPTHS = {16, 24, 32}
 VALID_STARTUP_MODES = {"dashboard", "direct_rdp"}
+VALID_OVERSCAN_MODES = {"none", "auto", "light", "medium"}
+
+OVERSCAN_PRESETS = {
+    "none": {"underscan": "off", "hborder": 0, "vborder": 0},
+    "auto": {"underscan": "auto", "hborder": 0, "vborder": 0},
+    "light": {"underscan": "on", "hborder": 24, "vborder": 16},
+    "medium": {"underscan": "on", "hborder": 48, "vborder": 32},
+}
 
 def _deep_merge_dict(base, override):
     """Recursively merges override into a copy of base."""
@@ -60,6 +69,9 @@ def validate_settings(settings):
     """Validates settings against the expected schema."""
     if not isinstance(settings, dict):
         return False, "La configurazione deve essere un oggetto."
+
+    if "overscan" in settings and settings["overscan"] not in VALID_OVERSCAN_MODES:
+        return False, f"Modalità overscan non valida: {settings['overscan']}. Valori ammessi: {', '.join(sorted(VALID_OVERSCAN_MODES))}"
 
     if "profile" in settings and settings["profile"] not in VALID_PROFILES:
         return False, f"Profilo non valido: {settings['profile']}. Valori ammessi: {', '.join(VALID_PROFILES)}"
@@ -201,6 +213,89 @@ def write_secure_yaml(filepath, data):
         pass
     os.replace(tmp_path, filepath)
 
+
+def parse_connected_outputs_with_props(xrandr_prop_output):
+    """Parses xrandr --prop output into a dict of {output_name: [prop_lines]}."""
+    outputs = {}
+    current_out = None
+    for line in xrandr_prop_output.splitlines():
+        if " connected" in line and not line.startswith(("\t", " ")):
+            parts = line.split()
+            current_out = parts[0]
+            outputs[current_out] = []
+        elif current_out:
+            if line.startswith(("\t", " ")):
+                outputs[current_out].append(line.strip())
+            else:
+                current_out = None
+    return outputs
+
+def apply_overscan(mode=None):
+    """
+    Applies overscan/underscan compensation to all active connected displays via xrandr.
+    Modes:
+      - 'none': Disables underscan (1:1 pixel mapping for PC monitors)
+      - 'auto': Enables auto underscan based on display EDID CEA flags
+      - 'light': Forces hardware underscan on with 24px horizontal / 16px vertical borders (~2.5%)
+      - 'medium': Forces hardware underscan on with 48px horizontal / 32px vertical borders (~5%)
+    """
+    if mode is None:
+        settings = get_settings()
+        mode = settings.get("overscan", "auto")
+
+    if mode not in OVERSCAN_PRESETS:
+        mode = "auto"
+
+    preset = OVERSCAN_PRESETS[mode]
+    if not shutil.which("xrandr"):
+        logger.info("xrandr not available, skipping overscan adjustment.")
+        return False, "xrandr non disponibile"
+
+    env = dict(os.environ, DISPLAY=os.environ.get("DISPLAY", ":0"))
+    try:
+        res = subprocess.run(["xrandr", "--prop"], env=env, capture_output=True, text=True, timeout=3)
+        if res.returncode != 0:
+            return False, f"xrandr fallito con codice {res.returncode}"
+
+        outputs_props = parse_connected_outputs_with_props(res.stdout)
+        if not outputs_props:
+            logger.info("Nessuna uscita video connessa rilevata da xrandr.")
+            return True, "Nessuna uscita video attiva"
+
+        applied = []
+        for out, props in outputs_props.items():
+            props_str = " ".join(props)
+            if "underscan" in props_str:
+                cmd = ["xrandr", "--output", out, "--set", "underscan", preset["underscan"]]
+                if "underscan hborder" in props_str:
+                    cmd.extend([
+                        "--set", "underscan hborder", str(preset["hborder"]),
+                        "--set", "underscan vborder", str(preset["vborder"])
+                    ])
+                cmd_res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=3)
+                if cmd_res.returncode == 0:
+                    applied.append(f"{out}: {mode}")
+                    logger.info(f"Overscan applicato con successo su {out}: {preset}")
+                else:
+                    logger.warning(f"Errore impostazione overscan su {out}: {cmd_res.stderr}")
+            else:
+                logger.info(f"Output {out} non supporta la proprietà DRM underscan.")
+
+        return True, f"Applicato a: {', '.join(applied) if applied else 'nessuna porta DRM con underscan'}"
+    except Exception as e:
+        logger.error(f"Errore durante applicazione overscan: {e}")
+        return False, str(e)
+
+def _trigger_live_overscan(merged):
+    try:
+        threading.Thread(
+            target=apply_overscan,
+            args=(merged.get("overscan", "auto"),),
+            daemon=True
+        ).start()
+    except Exception as e:
+        logger.warning(f"Could not spawn apply_overscan thread: {e}")
+
 def save_settings(settings):
     """
     Saves settings by performing a controlled merge with existing settings,
@@ -219,6 +314,7 @@ def save_settings(settings):
 
     try:
         write_secure_yaml(SETTINGS_FILE, merged)
+        _trigger_live_overscan(merged)
         return True, "Impostazioni salvate"
     except OSError as e:
         # Check if read-only filesystem error (errno 30)
@@ -227,6 +323,7 @@ def save_settings(settings):
             remount_fs(ro=False)
             try:
                 write_secure_yaml(SETTINGS_FILE, merged)
+                _trigger_live_overscan(merged)
                 return True, "Impostazioni salvate con successo"
             finally:
                 remount_fs(ro=True)
@@ -277,7 +374,8 @@ def get_system_metrics():
         "ram_percent": 0,
         "swap_total": 0,
         "swap_used": 0,
-        "resolution": "1920x1080"
+        "resolution": "1920x1080",
+        "overscan": get_settings().get("overscan", "auto")
     }
 
     # RAM and Swap
