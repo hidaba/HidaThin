@@ -9,11 +9,16 @@
 
 ## Aggiornamento e Riavvio Automatico del Thin Client Fisico
 - Al termine di ogni lavoro di modifica o implementazione e relativi test positivi, **aggiornare sempre il dispositivo thin client fisico** e procedere al suo **riavvio** (`reboot`).
-- La procedura standard per aggiornare e riavviare il thin client (host `thin01` / IP `100.68.91.18` o `192.168.1.131` via SSH con utente `root`) è:
-  1. Connettersi via SSH e sbloccare temporaneamente il filesystem root in scrittura: `mount -o remount,rw /`
-  2. Sincronizzare i file di progetto aggiornati in `/opt/thinclient/` (es. `app/`, `scripts/`, `static/`, `templates/`, `systemd/`, `tests/`), escludendo cache locali (`__pycache__`, `.pytest_cache`, `.git`) e preservando i file di configurazione attivi del dispositivo (`config/hosts.yaml`, `config/x11vnc.pass`).
-  3. Verificare i permessi di esecuzione sugli script (`chmod +x /opt/thinclient/scripts/*`).
-  4. Sincronizzare i buffer su disco fisico (`sync`).
-  5. Riavviare il sistema (`reboot` o `systemctl reboot`) per ripristinare il funzionamento su filesystem protetto in Read-Only con i nuovi cambiamenti attivi.
+- È disponibile lo script automatico dedicato:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\deploy-thinclient.ps1
+  ```
+- Tale script esegue automaticamente:
+  1. Archiviazione dei file di progetto aggiornati (`app/`, `scripts/`, `static/`, `templates/`, `systemd/`, `tests/`, `install.sh`, `CHANGELOG.md`), escludendo cache (`__pycache__`, `.pytest_cache`, `.git`) e preservando le configurazioni riservate del dispositivo (`hosts.yaml`, `x11vnc.pass`).
+  2. Connessione SSH verso il thin client (`thin01` / `100.68.91.18`) e sblocco temporaneo del filesystem root in scrittura (`mount -o remount,rw /`).
+  3. Estrazione dei file in `/opt/thinclient/`, normalizzazione dei caratteri di fine riga (LF) per gli script shell / xinitrc, impostazione dei permessi di esecuzione (`chmod +x`).
+  4. Sincronizzazione dei buffer fisici su disco (`sync`).
+  5. Invio del comando di riavvio (`reboot`) per far ripartire la macchina con filesystem protetto in sola lettura (`ro`) e i servizi aggiornati.
+
 
 

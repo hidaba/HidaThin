@@ -23,6 +23,16 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
+/* Ensure all form input fields, textareas, and selects allow standard text cursor, selection, and typing */
+input, textarea, select {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+input[type="checkbox"], input[type="radio"], button, select, label {
+    cursor: pointer;
+}
+
 body {
     background-color: var(--bg-color);
     color: var(--text-primary);
@@ -254,6 +264,9 @@ body {
     border-radius: 8px;
     color: #fff;
     outline: none;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
 }
 
 .input-text:focus {

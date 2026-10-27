@@ -90,7 +90,12 @@
         </div>
         <div class="form-group">
             <label for="host-password">Password Windows salvata (opzionale):</label>
-            <input type="password" id="host-password" class="input-text" placeholder="Lascia vuoto per non modificare">
+            <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="host-password" class="input-text" placeholder="Lascia vuoto per non modificare" style="padding-right: 48px;">
+                <button type="button" class="btn-toggle-eye" onclick="toggleHostPasswordVisibility()" title="Mostra / Nascondi password" tabindex="-1">
+                    👁
+                </button>
+            </div>
             <div id="host-saved-pwd-notice" style="display: none; margin-top: 6px; font-size: 0.88em; color: #4ade80;">
                 <span>🔒 Una password è già salvata. Lascia il campo vuoto per mantenerla.</span>
                 <div style="margin-top: 4px;">
@@ -134,6 +139,10 @@ function openHostModal() {
     document.getElementById('host-port').value = "3389";
     document.getElementById('host-default').checked = false;
     document.getElementById('host-modal').style.display = 'flex';
+    setTimeout(() => {
+        const inputName = document.getElementById('host-name');
+        if (inputName) { inputName.focus(); }
+    }, 60);
 }
 
 function editHostFromButton(btn) {
@@ -169,6 +178,10 @@ function editHostFromButton(btn) {
     }
 
     document.getElementById('host-modal').style.display = 'flex';
+    setTimeout(() => {
+        const inputName = document.getElementById('host-name');
+        if (inputName) { inputName.focus(); inputName.select(); }
+    }, 60);
 }
 
 function onClearPasswordToggle(isClearChecked) {
@@ -199,7 +212,7 @@ function saveHost() {
     const isDefault = document.getElementById('host-default').checked;
 
     if (!name || !hostname) {
-        alert("Inserisci Nome e Hostname del computer.");
+        showModal("Attenzione", "Inserisci Nome e Hostname del computer.");
         return;
     }
 
@@ -277,6 +290,13 @@ function testHostReachability(host, ip) {
     .then(data => {
         showModal(`Esito Ping: ${host}`, data.success ? `Successo! ${data.message}` : `Fallito: ${data.message}`);
     });
+}
+
+function toggleHostPasswordVisibility() {
+    const passInput = document.getElementById('host-password');
+    if (passInput) {
+        passInput.type = passInput.type === 'password' ? 'text' : 'password';
+    }
 }
 </script>
 {% endblock %}
