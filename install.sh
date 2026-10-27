@@ -95,6 +95,7 @@ PACKAGES_CORE=(
     git
     wireless-tools
     feh
+    adwaita-icon-theme
 )
 
 echo -e "      Installazione pacchetti base..."

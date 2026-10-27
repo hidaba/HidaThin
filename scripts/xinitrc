@@ -9,13 +9,16 @@ xset -dpms
 # Set 1:1 linear pointer acceleration in X11 (disable legacy acceleration curves)
 xset m 1 1
 
+# Set standard left pointer cursor to eliminate the default raw X11 'X' font cursor
+xsetroot -cursor_name left_ptr &
+
 # Set seamless splash background immediately on X11 root window to eliminate black screen
 SPLASH_IMG="/opt/thinclient/static/img/cyberpunk_splash.jpg"
 [ -f "$SPLASH_IMG" ] || SPLASH_IMG="$(cd "$(dirname "$0")/.." && pwd)/static/img/cyberpunk_splash.jpg"
 if command -v feh >/dev/null 2>&1 && [ -f "$SPLASH_IMG" ]; then
     feh --bg-fill "$SPLASH_IMG" &
 else
-    xsetroot -solid "#0f172a" &
+    xsetroot -solid "#0f172a" -cursor_name left_ptr &
 fi
 
 # Start Openbox window manager

@@ -127,20 +127,23 @@ def test_t26_splash_connection_phases_and_settings(test_client):
 def test_t27_silent_boot_service_and_xinitrc():
     """
     T27: Verifica configurazione Quiet/Silent Boot in thinclient-ui.service e scripts/xinitrc
-    per evitare messaggi di avvio e warning di X sulla console fisica.
+    per evitare messaggi di avvio e warning di X sulla console fisica, assicurando che
+    il puntatore del mouse rimanga abilitato e configurato (nessun flag -nocursor distruttivo).
     """
-    service_path = os.path.join(r"Y:\Progetti\thinclient", "systemd", "thinclient-ui.service")
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    service_path = os.path.join(base_dir, "systemd", "thinclient-ui.service")
     with open(service_path, "r", encoding="utf-8") as f:
         service_content = f.read()
 
     assert "StandardOutput=journal" in service_content
     assert "StandardError=journal" in service_content
-    assert "-nocursor" in service_content
+    assert "-nocursor" not in service_content
     assert "-logverbose 0" in service_content
 
-    xinitrc_path = os.path.join(r"Y:\Progetti\thinclient", "scripts", "xinitrc")
+    xinitrc_path = os.path.join(base_dir, "scripts", "xinitrc")
     with open(xinitrc_path, "r", encoding="utf-8") as f:
         xinitrc_content = f.read()
 
+    assert "xsetroot -cursor_name left_ptr" in xinitrc_content
     assert "feh --bg-fill" in xinitrc_content
     assert "--log-level=3" in xinitrc_content

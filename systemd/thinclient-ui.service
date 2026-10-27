@@ -10,7 +10,7 @@ User=root
 PAMName=login
 Environment=HOME=/root
 WorkingDirectory=/opt/thinclient
-ExecStart=/usr/bin/xinit /opt/thinclient/scripts/xinitrc -- :0 vt1 -s 0 -dpms -nocursor -logverbose 0 -logfile /tmp/Xorg.0.log
+ExecStart=/usr/bin/xinit /opt/thinclient/scripts/xinitrc -- :0 vt1 -s 0 -dpms -logverbose 0 -logfile /tmp/Xorg.0.log
 Restart=always
 RestartSec=2
 StandardInput=tty

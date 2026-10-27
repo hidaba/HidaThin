@@ -5,6 +5,15 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.19] - 2026-10-27
+
+### Risolto
+- **Ripristino Visibilità Cursore Mouse (`systemd/thinclient-ui.service`, `scripts/xinitrc`, `install.sh`)**:
+  - Rimosso il flag distruttivo `-nocursor` dal comando di avvio di Xorg in `thinclient-ui.service`. In Xorg, il parametro `-nocursor` disabilita a livello globale il rendering dello sprite del puntatore per l'intera sessione (Chromium Kiosk, Openbox e FreeRDP), rendendo il mouse completamente invisibile all'utente.
+  - Configurato il cursore predefinito in `scripts/xinitrc` tramite `xsetroot -cursor_name left_ptr`, eliminando alla radice l'antiquato puntatore a "X" della font root X11 e garantendo un puntatore a freccia standard e visibile fin dal caricamento dello splash screen.
+  - Aggiunto il pacchetto `adwaita-icon-theme` all'array `PACKAGES_CORE` in `install.sh` per fornire temi cursore moderni e vettoriali out-of-the-box.
+  - Aggiornato il test di regressione T27 in `tests/test_boot_status.py` per garantire che `-nocursor` non venga reintrodotto e che `xsetroot -cursor_name left_ptr` sia sempre configurato in `xinitrc`.
+
 ## [0.2.18] - 2026-10-26
 
 ### Esperienza Utente & Avvio Grafico (Silent Boot & Splash Screen)
