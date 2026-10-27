@@ -40,6 +40,9 @@ DEFAULT_SETTINGS = {
         "max_initial_attempts": 1,
         "fallback_to_dashboard": True,
         "splash_min_duration_seconds": 2
+    },
+    "ui": {
+        "mode": "native"                  # native (Tkinter Launcher) | chromium (Chromium Kiosk)
     }
 }
 
@@ -47,6 +50,7 @@ VALID_PROFILES = {"performance", "balanced", "quality"}
 VALID_COLOR_DEPTHS = {16, 24, 32}
 VALID_STARTUP_MODES = {"dashboard", "direct_rdp"}
 VALID_OVERSCAN_MODES = {"none", "auto", "light", "medium", "heavy"}
+VALID_UI_MODES = {"native", "chromium"}
 
 OVERSCAN_PCT = {
     "none": 0.0,
@@ -131,6 +135,11 @@ def validate_settings(settings):
             except (ValueError, TypeError):
                 return False, "splash_min_duration_seconds deve essere numerico."
 
+    if "ui" in settings and isinstance(settings["ui"], dict):
+        ui = settings["ui"]
+        if "mode" in ui and ui["mode"] not in VALID_UI_MODES:
+            return False, f"Modalità UI non valida: {ui['mode']}. Valori ammessi: {', '.join(sorted(VALID_UI_MODES))}"
+
     return True, ""
 
 def get_settings():
@@ -180,24 +189,58 @@ def get_fs_status():
         "mode_label": "SOLA LETTURA (Protetto)" if root_ro else "SCRITTURA (RW)"
     }
 
+def get_managed_mountpoints():
+    """
+    Returns a list of mountpoint paths on Linux that should be managed during remount operations.
+    Includes persistent directories (/opt/thinclient/config, /var/lib/tailscale,
+    /etc/NetworkManager/system-connections, /data) if present in /proc/mounts.
+    """
+    candidates = [
+        CONFIG_DIR,
+        "/etc/NetworkManager/system-connections",
+        "/var/lib/tailscale",
+        "/data"
+    ]
+    mounted = []
+    if os.path.exists("/proc/mounts"):
+        try:
+            with open("/proc/mounts", "r") as f:
+                current_mounts = {line.split()[1] for line in f if len(line.split()) >= 2}
+            for c in candidates:
+                norm_c = os.path.normpath(c)
+                if c in current_mounts or norm_c in current_mounts:
+                    if c not in mounted:
+                        mounted.append(c)
+        except Exception as e:
+            logger.warning(f"Error reading /proc/mounts: {e}")
+    return mounted
+
 def remount_fs(ro=True):
-    """Safely remounts / and /boot as ro or rw."""
+    """Safely remounts /, /boot, and any configuration/state bind-mounts as ro or rw."""
     mode = "ro" if ro else "rw"
     if sys.platform != "linux":
         logger.info(f"Simulating fs remount to {mode} on non-linux platform")
         return True, f"[Simulazione {sys.platform}] Filesystem impostato a {mode.upper()}"
     try:
         boot_path = "/boot/firmware" if os.path.exists("/boot/firmware") else "/boot"
+        managed_mounts = get_managed_mountpoints()
+
         if not ro:
             subprocess.run(["mount", "-o", f"remount,{mode}", "/"], check=True)
+            for mp in managed_mounts:
+                subprocess.run(["mount", "-o", f"remount,{mode},bind", mp], check=False)
             if os.path.exists(boot_path):
                 subprocess.run(["mount", "-o", f"remount,{mode}", boot_path], check=False)
         else:
             subprocess.run(["sync"], check=False)
+            for mp in managed_mounts:
+                subprocess.run(["mount", "-o", f"remount,{mode},bind", mp], check=False)
             if os.path.exists(boot_path):
                 subprocess.run(["mount", "-o", f"remount,{mode}", boot_path], check=False)
+            subprocess.run(["sync"], check=False)
             subprocess.run(["mount", "-o", f"remount,{mode}", "/"], check=True)
-        logger.info(f"Filesystem remounted to {mode.upper()} successfully")
+
+        logger.info(f"Filesystem remounted to {mode.upper()} successfully (managed: {managed_mounts})")
         return True, f"Filesystem rimontato in {mode.upper()}"
     except Exception as e:
         logger.error(f"Failed to remount filesystem as {mode}: {e}")
@@ -411,6 +454,9 @@ def save_settings(settings):
                 write_secure_yaml(SETTINGS_FILE, merged)
                 _trigger_live_overscan(merged)
                 return True, "Impostazioni salvate con successo"
+            except Exception as write_err:
+                logger.error(f"Error saving settings after remount: {write_err}")
+                return False, str(write_err)
             finally:
                 remount_fs(ro=True)
         logger.error(f"Error saving settings: {e}")

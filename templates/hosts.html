@@ -269,13 +269,21 @@ function setDefaultHost(key) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key })
     })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
+    .then(async r => {
+        let data;
+        try {
+            data = await r.json();
+        } catch (_) {
+            data = { success: false, message: `Errore server (${r.status})` };
+        }
+        if (r.ok && data.success) {
             window.location.reload();
         } else {
-            showModal("Errore", data.message);
+            showModal("Errore", data.message || "Impossibile impostare il PC come predefinito.");
         }
+    })
+    .catch((err) => {
+        showModal("Errore", "Errore di comunicazione con il servizio: " + err);
     });
 }
 

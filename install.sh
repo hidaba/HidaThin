@@ -101,8 +101,8 @@ PACKAGES_CORE=(
 echo -e "      Installazione pacchetti base..."
 apt-get install -y "${PACKAGES_CORE[@]}"
 
-# Handle Chromium package naming difference (chromium vs chromium-browser)
-echo -e "      Installazione browser Chromium per Kiosk UI..."
+# Handle Chromium package (optional fallback; HidaThin now defaults to Native Tkinter Launcher)
+echo -e "      Installazione browser Chromium per Kiosk UI (fallback opzionale)..."
 if ! apt-get install -y chromium 2>/dev/null; then
     if ! apt-get install -y chromium-browser 2>/dev/null; then
         echo -e "${YELLOW}[WARN] Impossibile trovare 'chromium' o 'chromium-browser' via APT standard.${NC}"
@@ -219,6 +219,8 @@ startup:
   max_initial_attempts: 1
   fallback_to_dashboard: true
   splash_min_duration_seconds: 2
+ui:
+  mode: "native"
 EOF
     fi
 fi
@@ -228,7 +230,7 @@ chown -R root:root "$INSTALL_DIR"
 chmod -R u=rwX,go=rX "$INSTALL_DIR"
 chmod 700 "$INSTALL_DIR/config"
 chmod 600 "$INSTALL_DIR/config/"*.yaml "$INSTALL_DIR/config/"*.pass 2>/dev/null || true
-chmod +x "$INSTALL_DIR/scripts/"*.sh "$INSTALL_DIR/scripts/xinitrc" "$INSTALL_DIR/scripts/"*.py "$INSTALL_DIR/install.sh" 2>/dev/null || true
+chmod +x "$INSTALL_DIR/scripts/"*.sh "$INSTALL_DIR/scripts/xinitrc" "$INSTALL_DIR/scripts/"*.py "$INSTALL_DIR/app/"*.py "$INSTALL_DIR/install.sh" 2>/dev/null || true
 
 # ------------------------------------------------------------------------------
 # 6. Hardware, Kernel & OS Optimizations

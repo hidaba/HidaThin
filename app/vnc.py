@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import socket
 import logging
-from app.system import get_settings, save_settings
+from app.system import get_settings, save_settings, remount_fs
 from app.tailscale import get_tailscale_status
 from app.wifi import get_network_status
 
@@ -119,13 +119,14 @@ def get_vnc_status():
 def set_vnc_password(password):
     """
     Encrypts and saves the VNC password using x11vnc -storepasswd.
-    Restricts file permissions to 0600.
+    Restricts file permissions to 0600. Handles read-only filesystem remount.
     """
     if not password or len(password.strip()) == 0:
-        return False, "La password VNC non può essere vuota."
+        return False, "La password VNC non pu\u00f2 essere vuota."
 
     pwd = password.strip()
-    try:
+
+    def _do_write():
         os.makedirs(CONFIG_DIR, exist_ok=True)
         if shutil.which("x11vnc"):
             res = subprocess.run(
@@ -154,8 +155,25 @@ def set_vnc_password(password):
         except Exception:
             pass
 
+    try:
+        _do_write()
         logger.info(f"VNC password updated successfully in {PASS_FILE}")
         return True, "Password VNC aggiornata con successo."
+    except OSError as e:
+        if getattr(e, 'errno', None) == 30 or "Read-only file system" in str(e):
+            logger.warning("Filesystem is Read-Only. Performing temporary remount RW to save VNC password...")
+            remount_fs(ro=False)
+            try:
+                _do_write()
+                logger.info(f"VNC password updated successfully in {PASS_FILE}")
+                return True, "Password VNC aggiornata con successo."
+            except Exception as write_err:
+                logger.error(f"Failed to write VNC password after remount: {write_err}")
+                return False, f"Errore impostazione password VNC: {write_err}"
+            finally:
+                remount_fs(ro=True)
+        logger.error(f"Failed to set VNC password: {e}")
+        return False, f"Errore impostazione password VNC: {e}"
     except Exception as e:
         logger.error(f"Failed to set VNC password: {e}")
         return False, f"Errore impostazione password VNC: {e}"

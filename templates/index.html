@@ -86,7 +86,12 @@
         </div>
 
         <div class="selector-box">
-            <label for="host-selector" class="selector-label">Seleziona Computer Remoto:</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="host-selector" class="selector-label" style="margin-bottom: 0;">Seleziona Computer Remoto:</label>
+                <button type="button" id="btn-set-default" class="btn-link" style="font-size: 0.85rem; padding: 2px 6px;" onclick="setDefaultHostFromMain()">
+                    ★ Imposta come predefinito
+                </button>
+            </div>
             <select id="host-selector" class="selector-dropdown" onchange="onHostSelected()" autofocus>
                 {% for key, host in hosts.items() %}
                 <option value="{{ key }}" data-username="{{ host.username or '' }}" data-has-password="{{ '1' if host.has_password else '0' }}" {% if key == default_host %}selected{% endif %}>
@@ -223,6 +228,59 @@ let activeBootAbortCtrl = null;
 let currentRdpHostKey = null;
 let currentAttempt = 0;
 const MAX_RDP_ATTEMPTS = 3;
+let currentDefaultHostKey = "{{ default_host }}";
+
+function updateDefaultHostButton() {
+    const selector = document.getElementById('host-selector');
+    const btn = document.getElementById('btn-set-default');
+    if (!selector || !btn) return;
+    const selectedKey = selector.value;
+    if (selectedKey === currentDefaultHostKey) {
+        btn.innerHTML = '✓ Predefinito all\'avvio';
+        btn.style.color = '#4ade80';
+        btn.style.cursor = 'default';
+        btn.style.textDecoration = 'none';
+        btn.disabled = true;
+    } else {
+        btn.innerHTML = '★ Imposta come predefinito';
+        btn.style.color = '#60a5fa';
+        btn.style.cursor = 'pointer';
+        btn.style.textDecoration = 'underline';
+        btn.disabled = false;
+    }
+}
+
+function setDefaultHostFromMain() {
+    const selector = document.getElementById('host-selector');
+    if (!selector) return;
+    const selectedKey = selector.value;
+    if (!selectedKey || selectedKey === currentDefaultHostKey) return;
+
+    const btn = document.getElementById('btn-set-default');
+    if (btn) btn.innerText = 'Salvataggio...';
+
+    fetch('/api/hosts/set-default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: selectedKey })
+    })
+    .then(async r => {
+        let data;
+        try { data = await r.json(); } catch (_) { data = { success: false, message: `Errore (${r.status})` }; }
+        if (r.ok && data.success) {
+            currentDefaultHostKey = selectedKey;
+            updateDefaultHostButton();
+            showModal("PC Predefinito", data.message || "PC predefinito aggiornato con successo.");
+        } else {
+            updateDefaultHostButton();
+            showModal("Errore", data.message || "Impossibile impostare il PC come predefinito.");
+        }
+    })
+    .catch(err => {
+        updateDefaultHostButton();
+        showModal("Errore", "Errore di comunicazione: " + err);
+    });
+}
 
 function isAuthFailure(data) {
     if (data.is_auth_error) return true;
@@ -410,6 +468,7 @@ function onHostSelected() {
             ? 'Opzioni accesso Windows (🔒 password salvata) ▼'
             : 'Opzioni accesso Windows (opzionale) ▼';
     }
+    updateDefaultHostButton();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

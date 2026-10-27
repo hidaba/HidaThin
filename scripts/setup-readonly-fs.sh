@@ -256,8 +256,8 @@ fi
 # 9. Install terminal helpers (ro, rw, fs-status)
 cat << 'EOF' > /etc/profile.d/readonly-helpers.sh
 # HidaThin Read-Only Quick Maintenance Aliases
-alias ro='sync && (mount -o remount,ro /boot/firmware 2>/dev/null || mount -o remount,ro /boot 2>/dev/null); mount -o remount,ro / && echo "[OK] Filesystem bloccato in SOLA LETTURA (RO)"'
-alias rw='mount -o remount,rw / && (mount -o remount,rw /boot/firmware 2>/dev/null || mount -o remount,rw /boot 2>/dev/null); echo "[ATTENZIONE] Filesystem sbloccato in SCRITTURA (RW)"'
+alias ro='sync && mount -o remount,ro,bind /opt/thinclient/config 2>/dev/null; mount -o remount,ro,bind /etc/NetworkManager/system-connections 2>/dev/null; mount -o remount,ro,bind /var/lib/tailscale 2>/dev/null; (mount -o remount,ro /boot/firmware 2>/dev/null || mount -o remount,ro /boot 2>/dev/null); sync && mount -o remount,ro / && echo "[OK] Filesystem bloccato in SOLA LETTURA (RO)"'
+alias rw='mount -o remount,rw / && (mount -o remount,rw /boot/firmware 2>/dev/null || mount -o remount,rw /boot 2>/dev/null); mount -o remount,rw,bind /opt/thinclient/config 2>/dev/null; mount -o remount,rw,bind /etc/NetworkManager/system-connections 2>/dev/null; mount -o remount,rw,bind /var/lib/tailscale 2>/dev/null; echo "[ATTENZIONE] Filesystem sbloccato in SCRITTURA (RW)"'
 
 fs-status() {
     echo "--- STATO FILESYSTEM HIDATHIN ---"

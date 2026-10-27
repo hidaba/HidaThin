@@ -218,3 +218,23 @@ def test_t28_overscan_api_endpoint():
     res_inv = client.post("/api/system/overscan/apply", json={"mode": "not_valid"})
     assert res_inv.status_code == 400
     assert res_inv.get_json()["success"] is False
+
+
+def test_t29_ui_mode_schema_validation(tmp_path, monkeypatch):
+    """
+    T29: Validazione schema per il motore UI locale (native vs chromium).
+    """
+    settings_file = tmp_path / "settings.yaml"
+    monkeypatch.setattr("app.system.SETTINGS_FILE", str(settings_file))
+
+    # Test valid modes
+    for mode in ["native", "chromium"]:
+        ok, msg = save_settings({"ui": {"mode": mode}})
+        assert ok is True
+        assert get_settings()["ui"]["mode"] == mode
+
+    # Test invalid mode
+    ok_inv, msg_inv = save_settings({"ui": {"mode": "electron_heavy"}})
+    assert ok_inv is False
+    assert "Modalità UI non valida" in msg_inv
+

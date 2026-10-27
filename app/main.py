@@ -84,16 +84,29 @@ def load_hosts_data(include_passwords=False):
 
 def save_hosts_data(data):
     """Writes hosts to config/hosts.yaml with 0600 permissions and auto-remount fallback if read-only."""
+    clean_data = {
+        "version": data.get("version", 1),
+        "default_host": data.get("default_host", ""),
+        "hosts": {}
+    }
+    for k, v in data.get("hosts", {}).items():
+        h = dict(v)
+        h.pop("has_password", None)
+        clean_data["hosts"][k] = h
+
     try:
-        write_secure_yaml(HOSTS_FILE, data)
+        write_secure_yaml(HOSTS_FILE, clean_data)
         return True, "Configurazione salvata con successo"
     except OSError as e:
         if getattr(e, 'errno', None) == 30 or "Read-only file system" in str(e):
             logger.warning("Filesystem is Read-Only. Performing temporary remount RW to save hosts...")
             remount_fs(ro=False)
             try:
-                write_secure_yaml(HOSTS_FILE, data)
+                write_secure_yaml(HOSTS_FILE, clean_data)
                 return True, "Configurazione salvata con successo"
+            except Exception as write_err:
+                logger.error(f"Error saving hosts.yaml after remount: {write_err}")
+                return False, str(write_err)
             finally:
                 remount_fs(ro=True)
         logger.error(f"Error saving hosts.yaml: {e}")
@@ -482,12 +495,23 @@ def api_hosts_delete():
 def api_hosts_set_default():
     req = request.get_json() or {}
     key = req.get("key")
+    if not key:
+        return jsonify({"success": False, "message": "Chiave host mancante"}), 400
+
     raw_data = load_hosts_data(include_passwords=True)
-    if key in raw_data.get("hosts", {}):
+    hosts = raw_data.get("hosts", {})
+    if key in hosts:
         raw_data["default_host"] = key
         success, msg = save_hosts_data(raw_data)
-        return jsonify({"success": success, "message": msg})
-    return jsonify({"success": False, "message": "Host non trovato"}), 404
+        if success:
+            host_name = hosts[key].get("name", key)
+            return jsonify({
+                "success": True,
+                "message": f"Host '{host_name}' impostato come predefinito.",
+                "default_host": key
+            })
+        return jsonify({"success": False, "message": msg}), 500
+    return jsonify({"success": False, "message": f"Host '{key}' non trovato"}), 404
 
 @app.route("/api/settings/save", methods=["POST"])
 def api_settings_save():

@@ -33,7 +33,7 @@ mount -o remount,rw /
 tar -xzf /tmp/thinclient-update.tar.gz -C /opt/thinclient
 rm -f /tmp/thinclient-update.tar.gz
 find /opt/thinclient -path /opt/thinclient/config -prune -o -path "*/__pycache__*" -prune -o -type f \( -name "*.sh" -o -name "xinitrc" -o -name "*.py" -o -name "*.service" -o -name "*.html" -o -name "*.yaml" -o -name "*.css" -o -name "*.js" \) -exec sed -i 's/\r$//' {} + 2>/dev/null || true
-chmod +x /opt/thinclient/scripts/* 2>/dev/null || true
+chmod +x /opt/thinclient/scripts/* /opt/thinclient/app/*.py 2>/dev/null || true
 sync
 echo "Aggiornamento applicato con successo su /opt/thinclient."
 '@.Replace("`r`n", "`n")

@@ -47,16 +47,33 @@ if [ -z "$CHROMIUM_BIN" ]; then
     echo "[xinitrc] ERROR: Neither 'chromium' nor 'chromium-browser' found in PATH." >&2
 fi
 
-# Detect startup mode from settings.yaml
+# Detect startup mode and UI engine from settings.yaml
 SETTINGS_FILE="/opt/thinclient/config/settings.yaml"
 [ -f "$SETTINGS_FILE" ] || SETTINGS_FILE="$(cd "$(dirname "$0")/.." && pwd)/config/settings.yaml"
 
 STARTUP_MODE="dashboard"
+UI_MODE="native"
 if [ -f "$SETTINGS_FILE" ]; then
     STARTUP_MODE=$(python3 -c "import yaml; d=yaml.safe_load(open('$SETTINGS_FILE')) if open('$SETTINGS_FILE') else {}; print(d.get('startup', {}).get('mode', 'dashboard'))" 2>/dev/null || echo "dashboard")
+    UI_MODE=$(python3 -c "import yaml; d=yaml.safe_load(open('$SETTINGS_FILE')) if open('$SETTINGS_FILE') else {}; print(d.get('ui', {}).get('mode', 'native'))" 2>/dev/null || echo "native")
 fi
 
-# If direct_rdp mode is enabled, run the coordinator first without launching Chromium
+echo "[xinitrc] Selected UI Mode: $UI_MODE (Startup mode: $STARTUP_MODE)"
+
+# --- OPTION A: Native Tkinter Launcher (WTware-Style, ~25MB RAM, instant boot) ---
+LAUNCHER_SCRIPT="/opt/thinclient/app/launcher.py"
+[ -f "$LAUNCHER_SCRIPT" ] || LAUNCHER_SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/app/launcher.py"
+
+if [ "$UI_MODE" = "native" ] && [ -f "$LAUNCHER_SCRIPT" ]; then
+    echo "[xinitrc] Launching Native Tkinter Launcher UI..."
+    while true; do
+        python3 "$LAUNCHER_SCRIPT" || true
+        sleep 1
+    done
+fi
+
+# --- FALLBACK / OPTION B: Chromium Kiosk Mode (Legacy, ~300MB RAM) ---
+# If direct_rdp mode is enabled with Chromium, run the coordinator first without launching Chromium
 if [ "$STARTUP_MODE" = "direct_rdp" ]; then
     echo "[xinitrc] Direct-to-RDP mode selected. Starting direct RDP coordinator..."
     COORDINATOR_SCRIPT="/opt/thinclient/scripts/direct_rdp_coordinator.py"

@@ -5,6 +5,28 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.23] - 2026-10-27
+
+### Aggiunto
+- **Launcher Nativo Tkinter WTware-Style (`app/launcher.py`, `scripts/xinitrc`, `config/settings.yaml`, `install.sh`, `tests/test_launcher_ui.py`)**:
+  - Implementato il nuovo Launcher Nativo ultra-leggero in Python/Tkinter in sostituzione di Chromium Kiosk UI come motore grafico locale predefinito (`ui.mode: native`).
+  - Footprint di memoria ridotto da oltre 300 MB a circa 25 MB RAM (< 10% del consumo di Chromium) e tempo di caricamento abbattuto da 5-7 secondi a meno di 250 ms.
+  - Supporto per griglia postazioni remote con indicazione dello stato di raggiungibilità in tempo reale, gestione credenziali interattiva/persistente, pill di stato Wi-Fi e Tailscale, modale di configurazione Wi-Fi con scansione reti, dialoghi di conferma per spegnimento e riavvio.
+  - Supporto integrato al conto alla rovescia Direct-to-RDP con pulsante immediato per annullare l'autoconnessione locale.
+  - Coordinamento completo con FreeRDP: il launcher si nasconde (`root.withdraw()`) durante la sessione a schermo intero e si ripristina istantaneamente alla chiusura (`root.deiconify()`).
+  - Il server Flask rimane attivo in background su porta 8080 per amministrazione e diagnostica remota (LAN / Tailscale).
+  - Aggiunta suite di test automatizzati `tests/test_launcher_ui.py`.
+
+### Risolto & Perfezionato
+- **Impostazione PC Predefinito e Remount Filesystem Read-Only (`app/system.py`, `app/main.py`, `app/vnc.py`, `templates/hosts.html`, `templates/index.html`, `scripts/setup-readonly-fs.sh`)**:
+  - Risolto errore 500 / EROFS ("Read-only file system") durante il salvataggio dell'host predefinito all'avvio: la routine `remount_fs` in sola lettura gestiva unicamente la partizione root (`/`), omettendo i bind-mount persistenti (`/opt/thinclient/config`, `/etc/NetworkManager/system-connections`, `/var/lib/tailscale`) che rimanevano bloccati in sola lettura.
+  - Implementata la funzione `get_managed_mountpoints()` in `app/system.py` per individuare e rimontare dinamicamente in scrittura (RW) e ripristinare in sola lettura (RO) sia il filesystem principale che tutti i bind-mount attivi.
+  - Corretta la gestione delle eccezioni nei blocchi `try ... finally` di `save_hosts_data()`, `save_settings()` e `set_vnc_password()`, impedendo crash non gestiti di Flask e assicurando il ripristino di `ro=True`.
+  - Aggiunta rimozione preventiva di chiavi transitorie non persistenti (`has_password`) prima del dump su `hosts.yaml`.
+  - Introdotto pulsante rapido `? Imposta come predefinito` direttamente nella schermata principale (`templates/index.html`) a fianco del menu a discesa del computer remoto, con aggiornamento dinamico dello stato (`? Predefinito all'avvio`).
+  - Aggiornati gli alias di manutenzione terminale `rw` e `ro` in `scripts/setup-readonly-fs.sh` (`/etc/profile.d/readonly-helpers.sh`) per includere i bind-mount gestiti.
+  - Aggiunta suite di test dedicati `tests/test_default_host.py`.
+
 ## [0.2.22] - 2026-10-27
 
 ### Risolto & Perfezionato

@@ -22,3 +22,5 @@ startup:
   max_initial_attempts: 1
   fallback_to_dashboard: true
   splash_min_duration_seconds: 2
+ui:
+  mode: "native"           # native (Launcher Nativo Tkinter) | chromium (Legacy Kiosk)
