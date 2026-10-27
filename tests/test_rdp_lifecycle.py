@@ -168,3 +168,87 @@ def test_t29_rdp_target_ip_resolution_and_error_codes():
         assert "/v:100.64.0.50" in cmd_args
 
         manager.disconnect()
+
+
+def test_t30_rdp_cleartype_fonts_and_profile_tuning():
+    """
+    T30: Verifica ottimizzazioni ClearType (+fonts, +aero, /bpp:32) e profili RDP.
+    Verifica:
+    1. +fonts e +aero sono sempre presenti per garantire testi nitidi e desktop compositing.
+    2. balanced profile usa /network:auto, non usa /gfx:progressive né RFX (previene sfocatura testo e carico CPU).
+    3. quality profile usa /gfx:AVC444,AVC420 con /frame-ack:1.
+    4. performance profile preserva +fonts disabilitando animazioni e drag.
+    5. Se color_depth è 24, in balanced/quality viene automaticamente elevato a 32 per pieno supporto ClearType.
+    """
+    manager = RDPManager()
+
+    # 1. Balanced profile (default)
+    with patch("subprocess.Popen") as mock_popen, \
+         patch("shutil.which", return_value="/usr/bin/xfreerdp3"), \
+         patch("app.rdp.get_settings", return_value={"profile": "balanced", "color_depth": 24}):
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_popen.return_value = mock_proc
+
+        ok, msg = manager.connect({"name": "PC Studio", "ip": "100.64.0.1"})
+        assert ok is True
+
+        args = mock_popen.call_args_list[0][0][0]
+        assert "+fonts" in args
+        assert "+aero" in args
+        assert "/bpp:32" in args  # Promoted from 24 to 32 for ClearType
+        assert "/cache:bitmap:on,offscreen:on" in args
+        assert "/network:auto" in args
+        assert "+themes" in args
+        # Ensure lossy progressive and RFX are NOT present in balanced
+        assert not any("/gfx:progressive" in a for a in args)
+        assert not any("/gfx:RFX" in a for a in args)
+
+        manager.disconnect()
+
+    # 2. Quality profile
+    with patch("subprocess.Popen") as mock_popen, \
+         patch("shutil.which", return_value="/usr/bin/xfreerdp3"), \
+         patch("app.rdp.get_settings", return_value={"profile": "quality", "color_depth": 32}):
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_popen.return_value = mock_proc
+
+        ok, msg = manager.connect({"name": "PC Studio", "ip": "100.64.0.1"})
+        assert ok is True
+
+        args = mock_popen.call_args_list[0][0][0]
+        assert "+fonts" in args
+        assert "/bpp:32" in args
+        assert "/gfx:AVC444,AVC420" in args
+        assert "/frame-ack:1" in args
+        assert "/network:lan" in args
+
+        manager.disconnect()
+
+    # 3. Performance profile
+    with patch("subprocess.Popen") as mock_popen, \
+         patch("shutil.which", return_value="/usr/bin/xfreerdp3"), \
+         patch("app.rdp.get_settings", return_value={"profile": "performance", "color_depth": 16}):
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_popen.return_value = mock_proc
+
+        ok, msg = manager.connect({"name": "PC Studio", "ip": "100.64.0.1"})
+        assert ok is True
+
+        args = mock_popen.call_args_list[0][0][0]
+        assert "+fonts" in args
+        assert "/bpp:16" in args
+        assert "-themes" in args
+        assert "-wallpaper" in args
+        assert "-menu-anims" in args
+        assert "-window-drag" in args
+
+        manager.disconnect()

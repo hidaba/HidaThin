@@ -243,7 +243,7 @@ Configure `/opt/thinclient/config/settings.yaml`:
 version: 1
 profile: "balanced"          # performance | balanced | quality
 resolution: "auto"           # auto | 1920x1080 | 1600x900 | 1280x720
-color_depth: 24              # 16 | 24 | 32
+color_depth: 32              # 16 | 24 | 32 (32 consigliato per ClearType nativo)
 sound: true
 auto_reconnect: true
 max_reconnect_retries: 3
@@ -270,6 +270,15 @@ Configure the VNC remote assistance password (required before starting VNC):
 sudo x11vnc -storepasswd "YourSecurePassword" /opt/thinclient/config/x11vnc.pass
 sudo chmod 600 /opt/thinclient/config/x11vnc.pass
 ```
+
+### 5b. Ottimizzazione Host Windows (Sblocco 60 FPS & ClearType)
+
+Per sbloccare il framerate massimo di Windows RDP da 30 a **60 FPS** (`DWMFRAMEINTERVAL = 15`) e abilitare l'accelerazione GPU hardware:
+- Eseguire come Amministratore sul PC Windows lo script:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\tune-windows-rdp-host.ps1
+  ```
+  oppure importare il file di registro `scripts\tune-windows-rdp-host.reg`.
 
 ### 6. Enable and Start Systemd Services
 

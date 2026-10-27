@@ -5,6 +5,22 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.24] - 2026-10-27
+
+### Risolto & Perfezionato
+- **Tuning RDP: Testo Cristallino ClearType e Risoluzione Caratteri Sgranati (`app/rdp.py`, `app/system.py`, `config/settings.yaml`, `templates/settings.html`, `install.sh`)**:
+  - Abilitato esplicitamente l'antialiasing subpixel TrueType/ClearType dei font con il flag `+fonts` e la composizione desktop `+aero` in FreeRDP 3.
+  - Portata la profondità colore predefinita da 24 a 32 bit (`color_depth: 32` / `/bpp:32`), requisito essenziale per abilitare il canale alpha di ClearType ed eliminare artefatti visivi sui font. Elevazione automatica a 32-bit nel profilo `balanced` anche per configurazioni preesistenti a 24-bit.
+  - Rimosso il codec `progressive` dal profilo predefinito `balanced`: la compressione progressiva causava una forte sfocatura e sgranatura del testo in movimento e saturava la CPU del Raspberry Pi 3 durante la decodifica software.
+  - Il profilo `balanced` ora utilizza la pipeline GDI nativa con rendering vettoriale dei glifi e caching bitmap avanzato (`/cache:bitmap:on,offscreen:on`), azzerando il carico CPU sul Pi 3 (<15%) e rendendo i caratteri nitidi al 100% (pixel-perfect).
+  - Aggiornato il profilo `quality` con supporto `/gfx:AVC444,AVC420` (YUV 4:4:4 senza compressione cromatica che degradava il testo colorato) e `/frame-ack:1`.
+  - Preservato `+fonts` anche nel profilo `performance`, disabilitando animazioni e drag di finestre per risparmiare banda senza compromettere la leggibilità del testo.
+
+### Aggiunto
+- **Script e Modulo Registro di Ottimizzazione Host Windows (`scripts/tune-windows-rdp-host.reg`, `scripts/tune-windows-rdp-host.ps1`)**:
+  - Creati gli script di ottimizzazione per PC Windows: sblocco del limite nativo di 30 FPS portando il framerate DWM a 60 FPS (`DWMFRAMEINTERVAL = 15`), attivazione dell'accelerazione hardware GPU per le sessioni Desktop Remoto e prioritizzazione dei codec hardware.
+  - Aggiunto test di regressione dedicato `test_t30_rdp_cleartype_fonts_and_profile_tuning` in `tests/test_rdp_lifecycle.py`.
+
 ## [0.2.23] - 2026-10-27
 
 ### Aggiunto

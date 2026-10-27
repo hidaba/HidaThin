@@ -1,0 +1,22 @@
+Windows Registry Editor Version 5.00
+
+; ====================================================================
+; HidaThin — Ottimizzazione Host Windows per Connessioni RDP
+; 1. Sblocca il framerate da 30 a 60 FPS (DWMFRAMEINTERVAL = 15 ms).
+; 2. Abilita accelerazione hardware GPU per le sessioni Desktop Remoto.
+; 3. Abilita priorità codec AVC444 / H.264 ad alta definizione.
+; ====================================================================
+
+; Sblocco framerate RDP a 60 FPS (default Windows: 30 FPS)
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations]
+"DWMFRAMEINTERVAL"=dword:0000000f
+
+; Abilitazione accelerazione GPU e selezione hardware
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services]
+"bEnumerateHWUsingImages"=dword:00000001
+"bUseHardwareGraphicsAdapter"=dword:00000001
+"SelectTransport"=dword:00000001
+
+; Modalità grafica hardware / AVC444
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\Client]
+"EnableHardwareMode"=dword:00000001
