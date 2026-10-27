@@ -147,3 +147,22 @@ def test_t27_silent_boot_service_and_xinitrc():
     assert "xsetroot -cursor_name left_ptr" in xinitrc_content
     assert "feh --bg-fill" in xinitrc_content
     assert "--log-level=3" in xinitrc_content
+
+def test_t28_footer_version_after_tailscale(test_client):
+    """
+    T28: Verifica che nel footer la versione dell'applicazione sia posizionata
+    a destra dopo le informazioni di connessione di rete e Tailscale IP.
+    """
+    res = test_client.get("/")
+    assert res.status_code == 200
+    html = res.data.decode("utf-8")
+
+    idx_sys_info = html.find('id="system-info-text"')
+    idx_divider = html.find('class="footer-divider"')
+    idx_version = html.find('id="footer-version"')
+
+    assert idx_sys_info != -1
+    assert idx_divider != -1
+    assert idx_version != -1
+    assert idx_sys_info < idx_divider < idx_version
+
