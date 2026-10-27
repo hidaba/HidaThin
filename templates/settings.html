@@ -53,6 +53,7 @@
                         <option value="auto" {% if not settings.overscan or settings.overscan == 'auto' %}selected{% endif %}>Automatica (Rilevamento EDID HDMI)</option>
                         <option value="light" {% if settings.overscan == 'light' %}selected{% endif %}>Leggera (~2.5% margini - TV con zoom lieve)</option>
                         <option value="medium" {% if settings.overscan == 'medium' %}selected{% endif %}>Marcata (~5% margini - TV standard)</option>
+                        <option value="heavy" {% if settings.overscan == 'heavy' %}selected{% endif %}>Massima (~7.5% margini - TV con zoom elevato)</option>
                     </select>
                     <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
                         Evita che i bordi escano dallo schermo quando il thin client è collegato a TV o schermi HDMI.

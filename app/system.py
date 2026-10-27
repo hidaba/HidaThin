@@ -46,13 +46,21 @@ DEFAULT_SETTINGS = {
 VALID_PROFILES = {"performance", "balanced", "quality"}
 VALID_COLOR_DEPTHS = {16, 24, 32}
 VALID_STARTUP_MODES = {"dashboard", "direct_rdp"}
-VALID_OVERSCAN_MODES = {"none", "auto", "light", "medium"}
+VALID_OVERSCAN_MODES = {"none", "auto", "light", "medium", "heavy"}
+
+OVERSCAN_PCT = {
+    "none": 0.0,
+    "light": 0.025,
+    "medium": 0.05,
+    "heavy": 0.075,
+}
 
 OVERSCAN_PRESETS = {
-    "none": {"underscan": "off", "hborder": 0, "vborder": 0},
-    "auto": {"underscan": "auto", "hborder": 0, "vborder": 0},
-    "light": {"underscan": "on", "hborder": 24, "vborder": 16},
-    "medium": {"underscan": "on", "hborder": 48, "vborder": 32},
+    "none": {"underscan": "off", "hborder": 0, "vborder": 0, "pct": 0.0},
+    "auto": {"underscan": "auto", "hborder": 0, "vborder": 0, "pct": None},
+    "light": {"underscan": "on", "hborder": 24, "vborder": 16, "pct": 0.025},
+    "medium": {"underscan": "on", "hborder": 48, "vborder": 32, "pct": 0.05},
+    "heavy": {"underscan": "on", "hborder": 72, "vborder": 40, "pct": 0.075},
 }
 
 def _deep_merge_dict(base, override):
@@ -214,6 +222,25 @@ def write_secure_yaml(filepath, data):
     os.replace(tmp_path, filepath)
 
 
+def compute_transform_matrix(width=1920, height=1080, pct=0.0):
+    """
+    Computes xrandr coordinate transformation matrix for shrinking the desktop
+    inside the physical display raster to compensate for TV overscan cropping.
+    """
+    if pct <= 0.0:
+        return "none"
+    margin_h = round(width * pct / 2)
+    margin_v = round(height * pct / 2)
+    visible_w = width - 2 * margin_h
+    visible_h = height - 2 * margin_v
+    if visible_w <= 0 or visible_h <= 0:
+        return "none"
+    sx = width / visible_w
+    sy = height / visible_h
+    tx = -sx * margin_h
+    ty = -sy * margin_v
+    return f"{sx:.6f},0,{tx:.6f},0,{sy:.6f},{ty:.6f},0,0,1"
+
 def parse_connected_outputs_with_props(xrandr_prop_output):
     """Parses xrandr --prop output into a dict of {output_name: [prop_lines]}."""
     outputs = {}
@@ -230,14 +257,30 @@ def parse_connected_outputs_with_props(xrandr_prop_output):
                 current_out = None
     return outputs
 
+def is_display_television(props_list):
+    """Detects whether a connected display is a TV (likely to have hardware overscan)."""
+    text = " ".join(props_list).upper()
+    tv_vendors = ["SAMSUNG", "LG", "SONY", "PHILIPS", "PANASONIC", "TOSHIBA", "HISENSE", "TCL", "SHARP"]
+    for v in tv_vendors:
+        if v in text:
+            return True
+    if "1080I" in text or "576I" in text or "480I" in text:
+        return True
+    return False
+
 def apply_overscan(mode=None):
     """
-    Applies overscan/underscan compensation to all active connected displays via xrandr.
+    Applies overscan compensation to all active connected displays via xrandr.
+    Supports:
+      - Core X11 RANDR affine transform matrices (CRTC scaling, universal across all drivers)
+      - DRM Broadcast RGB (Full) for automatic PC mode negotiation on TV
+      - DRM hardware margins / underscan where supported
     Modes:
-      - 'none': Disables underscan (1:1 pixel mapping for PC monitors)
-      - 'auto': Enables auto underscan based on display EDID CEA flags
-      - 'light': Forces hardware underscan on with 24px horizontal / 16px vertical borders (~2.5%)
-      - 'medium': Forces hardware underscan on with 48px horizontal / 32px vertical borders (~5%)
+      - 'none': 1:1 pixel mapping for PC monitors
+      - 'auto': Automatically detects TVs vs PC monitors (applies 5% on TV, 0% on monitor)
+      - 'light': ~2.5% margin reduction (~24px H / 14px V on 1080p)
+      - 'medium': ~5.0% margin reduction (~48px H / 27px V on 1080p)
+      - 'heavy': ~7.5% margin reduction (~72px H / 40px V on 1080p)
     """
     if mode is None:
         settings = get_settings()
@@ -262,26 +305,69 @@ def apply_overscan(mode=None):
             logger.info("Nessuna uscita video connessa rilevata da xrandr.")
             return True, "Nessuna uscita video attiva"
 
+        # Determine active resolution from xrandr output
+        width, height = 1920, 1080
+        for line in res.stdout.splitlines():
+            if "*" in line:
+                res_match = line.strip().split()[0]
+                if "x" in res_match:
+                    try:
+                        w, h = map(int, res_match.split("x"))
+                        width, height = w, h
+                        break
+                    except Exception:
+                        pass
+
         applied = []
         for out, props in outputs_props.items():
             props_str = " ".join(props)
-            if "underscan" in props_str:
-                cmd = ["xrandr", "--output", out, "--set", "underscan", preset["underscan"]]
-                if "underscan hborder" in props_str:
-                    cmd.extend([
-                        "--set", "underscan hborder", str(preset["hborder"]),
-                        "--set", "underscan vborder", str(preset["vborder"])
-                    ])
-                cmd_res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=3)
-                if cmd_res.returncode == 0:
-                    applied.append(f"{out}: {mode}")
-                    logger.info(f"Overscan applicato con successo su {out}: {preset}")
-                else:
-                    logger.warning(f"Errore impostazione overscan su {out}: {cmd_res.stderr}")
-            else:
-                logger.info(f"Output {out} non supporta la proprietà DRM underscan.")
 
-        return True, f"Applicato a: {', '.join(applied) if applied else 'nessuna porta DRM con underscan'}"
+            # Determine percentage for this display
+            pct = preset["pct"]
+            if pct is None:  # auto mode
+                is_tv = is_display_television(props)
+                pct = 0.05 if is_tv else 0.0
+                logger.info(f"Overscan auto-detection for {out}: is_tv={is_tv} -> pct={pct}")
+
+            # 1. Apply core X11 transform matrix (guaranteed scaling across all drivers)
+            matrix = compute_transform_matrix(width, height, pct)
+            cmd_transform = ["xrandr", "--output", out, "--transform", matrix]
+            cmd_res = subprocess.run(cmd_transform, env=env, capture_output=True, text=True, timeout=3)
+            if cmd_res.returncode == 0:
+                applied.append(f"{out}: {mode} ({pct*100:.1f}%)")
+                logger.info(f"Overscan transform matrix applicata su {out}: matrix='{matrix}'")
+            else:
+                logger.warning(f"Errore transform matrix su {out}: {cmd_res.stderr}")
+
+            # 2. Set Broadcast RGB Full if supported to signal PC mode to TV
+            if "Broadcast RGB" in props_str:
+                subprocess.run(
+                    ["xrandr", "--output", out, "--set", "Broadcast RGB", "Full"],
+                    env=env, capture_output=True, text=True, timeout=2
+                )
+
+            # 3. Apply DRM margins or underscan if driver supports it
+            margin_h = round(width * pct / 2)
+            margin_v = round(height * pct / 2)
+            if "left margin" in props_str:
+                subprocess.run([
+                    "xrandr", "--output", out,
+                    "--set", "left margin", str(min(100, margin_h)),
+                    "--set", "right margin", str(min(100, margin_h)),
+                    "--set", "top margin", str(min(100, margin_v)),
+                    "--set", "bottom margin", str(min(100, margin_v))
+                ], env=env, capture_output=True, text=True, timeout=2)
+            elif "underscan" in props_str:
+                underscan_val = "off" if pct <= 0 else "on"
+                cmd_under = ["xrandr", "--output", out, "--set", "underscan", underscan_val]
+                if "underscan hborder" in props_str:
+                    cmd_under.extend([
+                        "--set", "underscan hborder", str(min(128, margin_h)),
+                        "--set", "underscan vborder", str(min(128, margin_v))
+                    ])
+                subprocess.run(cmd_under, env=env, capture_output=True, text=True, timeout=2)
+
+        return True, f"Applicato a: {', '.join(applied) if applied else 'nessuna porta video'}"
     except Exception as e:
         logger.error(f"Errore durante applicazione overscan: {e}")
         return False, str(e)

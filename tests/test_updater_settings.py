@@ -130,7 +130,7 @@ def test_t26_overscan_schema_validation(tmp_path, monkeypatch):
     settings_file = tmp_path / "settings.yaml"
     monkeypatch.setattr("app.system.SETTINGS_FILE", str(settings_file))
 
-    for mode in ["none", "auto", "light", "medium"]:
+    for mode in ["none", "auto", "light", "medium", "heavy"]:
         ok, msg = save_settings({"overscan": mode})
         assert ok is True
         assert get_settings()["overscan"] == mode
@@ -142,17 +142,22 @@ def test_t26_overscan_schema_validation(tmp_path, monkeypatch):
 
 def test_t27_apply_overscan():
     """
-    T27: Applicazione hardware underscan via xrandr.
+    T27: Applicazione trasformazione scaling xrandr e DRM margins.
     """
-    from app.system import apply_overscan
+    from app.system import apply_overscan, compute_transform_matrix
 
-    # 1. xrandr not available
+    # 1. Test compute_transform_matrix
+    assert compute_transform_matrix(1920, 1080, 0.0) == "none"
+    matrix_med = compute_transform_matrix(1920, 1080, 0.05)
+    assert "1.052632" in matrix_med
+
+    # 2. xrandr not available
     with patch("shutil.which", return_value=None):
         ok, msg = apply_overscan("auto")
         assert ok is False
         assert "non disponibile" in msg
 
-    # 2. xrandr available with DRM underscan support
+    # 3. xrandr available with DRM support
     sample_xrandr_prop = """Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 7680 x 7680
 HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 527mm x 296mm
 \tEDID:
@@ -163,43 +168,39 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
 \t\trange: (0, 128)
 \tunderscan hborder: 0
 \t\trange: (0, 128)
+\tBroadcast RGB: Automatic
 HDMI-2 disconnected (normal left inverted right x axis y axis)
+   1920x1080     60.00*+
 """
 
     mock_res_prop = MagicMock(returncode=0, stdout=sample_xrandr_prop)
-    mock_res_set = MagicMock(returncode=0, stdout="", stderr="")
+    mock_res_ok = MagicMock(returncode=0, stdout="", stderr="")
 
     with patch("shutil.which", return_value="/usr/bin/xrandr"), \
          patch("subprocess.run") as mock_subproc:
 
-        mock_subproc.side_effect = [mock_res_prop, mock_res_set]
+        mock_subproc.side_effect = [mock_res_prop, mock_res_ok, mock_res_ok, mock_res_ok]
         ok, msg = apply_overscan("light")
         assert ok is True
         assert "HDMI-1: light" in msg
 
-        # Verify xrandr command arguments
-        set_call = mock_subproc.call_args_list[1][0][0]
-        assert set_call == [
-            "xrandr", "--output", "HDMI-1",
-            "--set", "underscan", "on",
-            "--set", "underscan hborder", "24",
-            "--set", "underscan vborder", "16"
-        ]
+        # First call is xrandr --prop
+        # Second call is xrandr --output HDMI-1 --transform <matrix>
+        transform_call = mock_subproc.call_args_list[1][0][0]
+        assert transform_call[0] == "xrandr"
+        assert transform_call[1] == "--output"
+        assert transform_call[2] == "HDMI-1"
+        assert transform_call[3] == "--transform"
 
-    # 3. Test mode 'none'
+    # 4. Test mode 'none'
     with patch("shutil.which", return_value="/usr/bin/xrandr"), \
          patch("subprocess.run") as mock_subproc:
 
-        mock_subproc.side_effect = [mock_res_prop, mock_res_set]
+        mock_subproc.side_effect = [mock_res_prop, mock_res_ok, mock_res_ok, mock_res_ok]
         ok, msg = apply_overscan("none")
         assert ok is True
-        set_call = mock_subproc.call_args_list[1][0][0]
-        assert set_call == [
-            "xrandr", "--output", "HDMI-1",
-            "--set", "underscan", "off",
-            "--set", "underscan hborder", "0",
-            "--set", "underscan vborder", "0"
-        ]
+        transform_call = mock_subproc.call_args_list[1][0][0]
+        assert transform_call == ["xrandr", "--output", "HDMI-1", "--transform", "none"]
 
 
 def test_t28_overscan_api_endpoint():

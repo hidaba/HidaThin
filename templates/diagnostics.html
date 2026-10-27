@@ -51,7 +51,8 @@
                         {% if metrics.overscan == 'none' %}Disattivata (1:1)
                         {% elif metrics.overscan == 'light' %}Leggera (~2.5%)
                         {% elif metrics.overscan == 'medium' %}Marcata (~5%)
-                        {% else %}Automatica (EDID)
+                        {% elif metrics.overscan == 'heavy' %}Massima (~7.5%)
+                        {% else %}Automatica (Rilevamento TV)
                         {% endif %}
                     </strong></td></tr>
                     <tr><td>Filesystem Root (/):</td><td><strong style="color: {% if fs.root_ro %}#4ade80{% else %}#f59e0b{% endif %};">{{ 'SOLA LETTURA (Protetto)' if fs.root_ro else 'SCRITTURA (RW)' }}</strong></td></tr>
