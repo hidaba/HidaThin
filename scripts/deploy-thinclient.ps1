@@ -27,7 +27,7 @@ try {
     scp -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$TempArchive" "${User}@${TargetHost}:/tmp/thinclient-update.tar.gz"
 
     Write-Host "[3/4] Applicazione aggiornamento su /opt/thinclient (RW remount)..." -ForegroundColor Yellow
-    $RemoteCommands = @'
+    $RemoteScript = @'
 set -e
 mount -o remount,rw /
 tar -xzf /tmp/thinclient-update.tar.gz -C /opt/thinclient
@@ -37,8 +37,9 @@ chmod +x /opt/thinclient/scripts/* 2>/dev/null || true
 python3 -c "import yaml; p='/opt/thinclient/config/settings.yaml'; d=yaml.safe_load(open(p)) if open(p) else {}; d.setdefault('overscan','auto'); yaml.safe_dump(d, open(p,'w'))" 2>/dev/null || true
 sync
 echo "Aggiornamento applicato con successo su /opt/thinclient."
-'@
-    ssh -o ConnectTimeout=10 "${User}@${TargetHost}" "$RemoteCommands"
+'@.Replace("`r`n", "`n")
+
+    $RemoteScript | ssh -o ConnectTimeout=15 "${User}@${TargetHost}" "cat > /tmp/do-update.sh && bash /tmp/do-update.sh && rm -f /tmp/do-update.sh"
 
     if (-not $NoReboot) {
         Write-Host "[4/4] Riavvio del thin client in corso..." -ForegroundColor Green

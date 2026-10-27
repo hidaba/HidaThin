@@ -140,6 +140,77 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Richiesta Credenziali RDP con Gestione Fino a 3 Tentativi (AUTH-03) -->
+<div id="credentials-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box credentials-modal-box">
+        <div class="credentials-modal-header">
+            <div class="credentials-modal-icon">🔐</div>
+            <div>
+                <h3 id="cred-modal-title" style="margin: 0; color: #60a5fa; font-size: 1.25rem;">Accesso a PC Remoto</h3>
+                <div id="cred-modal-subtitle" style="font-size: 0.9rem; color: #94a3b8; margin-top: 3px;">
+                    Inserisci le credenziali Windows per connetterti
+                </div>
+            </div>
+        </div>
+
+        <input type="hidden" id="cred-modal-host-key">
+
+        <!-- Error/Alert Banner for Failed Attempts -->
+        <div id="cred-modal-alert" class="cred-alert-box" style="display: none;">
+            <div class="cred-alert-icon">⚠️</div>
+            <div class="cred-alert-text" id="cred-modal-alert-text">
+                Password errata. Riprova.
+            </div>
+        </div>
+
+        <!-- Attempt Counter Visual Indicator -->
+        <div class="cred-attempt-bar">
+            <span class="cred-attempt-label" id="cred-attempt-label">Tentativo 1 di 3</span>
+            <div class="cred-attempt-dots">
+                <span class="cred-dot" id="dot-1"></span>
+                <span class="cred-dot" id="dot-2"></span>
+                <span class="cred-dot" id="dot-3"></span>
+            </div>
+        </div>
+
+        <form id="credentials-form" onsubmit="submitCredentialsModal(event)">
+            <div class="form-group" style="margin-top: 15px;">
+                <label for="cred-modal-user" style="color: #cbd5e1; font-size: 0.95rem; font-weight: 500;">
+                    Nome Utente Windows:
+                </label>
+                <input type="text" id="cred-modal-user" class="input-text" placeholder="Es. Mario o Amministratore" autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label for="cred-modal-pass" style="color: #cbd5e1; font-size: 0.95rem; font-weight: 500;">
+                    Password Windows:
+                </label>
+                <div style="position: relative; display: flex; align-items: center;">
+                    <input type="password" id="cred-modal-pass" class="input-text" placeholder="Inserisci la password" autocomplete="current-password" style="padding-right: 48px;">
+                    <button type="button" id="btn-toggle-modal-pass" class="btn-toggle-eye" onclick="toggleModalPassVisibility()" title="Mostra / Nascondi password" tabindex="-1">
+                        👁
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group checkbox-row" style="margin-top: 10px; margin-bottom: 22px;">
+                <label class="checkbox-label" for="cred-modal-save">
+                    <input type="checkbox" id="cred-modal-save" class="checkbox-input" checked>
+                    <span>Salva credenziali per questo PC</span>
+                </label>
+            </div>
+
+            <div class="modal-buttons">
+                <button type="button" class="btn btn-secondary" onclick="closeCredentialsModal()">Annulla</button>
+                <button type="submit" id="btn-cred-submit" class="btn btn-primary" style="min-width: 130px;">
+                    Connetti
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -148,6 +219,162 @@ let isConnecting = false;
 let splashDismissed = false;
 let bootPollTimer = null;
 let activeBootAbortCtrl = null;
+
+let currentRdpHostKey = null;
+let currentAttempt = 0;
+const MAX_RDP_ATTEMPTS = 3;
+
+function isAuthFailure(data) {
+    if (data.is_auth_error) return true;
+    const err = (data.error || '').toLowerCase();
+    return err.includes('autenticazione') ||
+           err.includes('password') ||
+           err.includes('nla') ||
+           err.includes('credenziali') ||
+           err.includes('logon') ||
+           err.includes('permessi');
+}
+
+function updateAttemptIndicator(attempt) {
+    const label = document.getElementById('cred-attempt-label');
+    const dot1 = document.getElementById('dot-1');
+    const dot2 = document.getElementById('dot-2');
+    const dot3 = document.getElementById('dot-3');
+
+    dot1.className = 'cred-dot';
+    dot2.className = 'cred-dot';
+    dot3.className = 'cred-dot';
+
+    if (attempt <= 1) {
+        label.innerText = 'Tentativo 1 di 3';
+        label.style.color = '#94a3b8';
+        dot1.className = 'cred-dot active-1';
+    } else if (attempt === 2) {
+        label.innerText = 'Tentativo 2 di 3';
+        label.style.color = '#f59e0b';
+        dot1.className = 'cred-dot active-1';
+        dot2.className = 'cred-dot active-2';
+    } else {
+        label.innerText = 'Tentativo 3 di 3 (Ultimo)';
+        label.style.color = '#ef4444';
+        dot1.className = 'cred-dot active-1';
+        dot2.className = 'cred-dot active-2';
+        dot3.className = 'cred-dot active-3';
+    }
+}
+
+function openCredentialsModal(opts) {
+    const modal = document.getElementById('credentials-modal');
+    const title = document.getElementById('cred-modal-title');
+    const sub = document.getElementById('cred-modal-subtitle');
+    const hostKeyInput = document.getElementById('cred-modal-host-key');
+    const userInput = document.getElementById('cred-modal-user');
+    const passInput = document.getElementById('cred-modal-pass');
+    const alertBox = document.getElementById('cred-modal-alert');
+    const alertText = document.getElementById('cred-modal-alert-text');
+
+    hostKeyInput.value = opts.hostKey;
+    title.innerText = `Accesso a ${opts.hostName}`;
+
+    if (opts.alertMessage) {
+        alertText.innerText = opts.alertMessage;
+        alertBox.style.display = 'flex';
+        sub.innerText = "Verifica e reinserisci le credenziali corrette";
+    } else {
+        alertBox.style.display = 'none';
+        sub.innerText = "Inserisci le credenziali Windows per connetterti";
+    }
+
+    userInput.value = opts.user || '';
+    passInput.value = '';
+    passInput.type = 'password';
+    const toggleBtn = document.getElementById('btn-toggle-modal-pass');
+    if (toggleBtn) toggleBtn.innerText = '👁';
+
+    updateAttemptIndicator(opts.attempt || 1);
+
+    modal.style.display = 'flex';
+
+    setTimeout(() => {
+        if (!userInput.value) {
+            userInput.focus();
+        } else {
+            passInput.focus();
+        }
+    }, 120);
+}
+
+function closeCredentialsModal() {
+    const modal = document.getElementById('credentials-modal');
+    modal.style.display = 'none';
+    currentAttempt = 0;
+}
+
+function toggleModalPassVisibility() {
+    const passInput = document.getElementById('cred-modal-pass');
+    const btn = document.getElementById('btn-toggle-modal-pass');
+    if (passInput.type === 'password') {
+        passInput.type = 'text';
+        btn.innerText = '🙈';
+    } else {
+        passInput.type = 'password';
+        btn.innerText = '👁';
+    }
+}
+
+function submitCredentialsModal(e) {
+    if (e) e.preventDefault();
+    if (isConnecting) return;
+
+    const hostKey = document.getElementById('cred-modal-host-key').value;
+    const selector = document.getElementById('host-selector');
+    const hostName = selector && selector.options[selector.selectedIndex] ? selector.options[selector.selectedIndex].text.split('(')[0].trim() : 'PC Remoto';
+
+    const user = document.getElementById('cred-modal-user').value.trim();
+    const pass = document.getElementById('cred-modal-pass').value;
+    const savePass = document.getElementById('cred-modal-save').checked;
+
+    if (!user) {
+        const alertBox = document.getElementById('cred-modal-alert');
+        const alertText = document.getElementById('cred-modal-alert-text');
+        alertText.innerText = "Inserisci il nome utente Windows.";
+        alertBox.style.display = 'flex';
+        document.getElementById('cred-modal-user').focus();
+        return;
+    }
+
+    if (!pass) {
+        const alertBox = document.getElementById('cred-modal-alert');
+        const alertText = document.getElementById('cred-modal-alert-text');
+        alertText.innerText = "Inserisci la password Windows.";
+        alertBox.style.display = 'flex';
+        document.getElementById('cred-modal-pass').focus();
+        return;
+    }
+
+    if (currentAttempt === 0) {
+        currentAttempt = 1;
+    }
+
+    // Hide credentials modal, start connection
+    document.getElementById('credentials-modal').style.display = 'none';
+
+    // Synchronize values into main page optional inputs
+    const mainUser = document.getElementById('rdp-user');
+    const mainPass = document.getElementById('rdp-pass');
+    const mainSave = document.getElementById('rdp-save-pass');
+    if (mainUser) mainUser.value = user;
+    if (mainPass) mainPass.value = pass;
+    if (mainSave) mainSave.checked = savePass;
+
+    executeRdpConnect({
+        hostKey: hostKey,
+        hostName: hostName,
+        username: user,
+        password: pass,
+        savePassword: savePass
+    });
+}
 
 function toggleCredentials() {
     const box = document.getElementById('credentials-box');
@@ -209,6 +436,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const modalUser = document.getElementById('cred-modal-user');
+    const modalPass = document.getElementById('cred-modal-pass');
+    if (modalUser) {
+        modalUser.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                modalPass ? modalPass.focus() : submitCredentialsModal();
+            }
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('credentials-modal');
+            if (modal && modal.style.display !== 'none') {
+                closeCredentialsModal();
+            }
+        }
+    });
+
     initBootSplash();
 });
 
@@ -216,18 +463,65 @@ function startConnection() {
     if (isConnecting) return;
 
     const selector = document.getElementById('host-selector');
-    const hostKey = selector.value;
-    const hostName = selector.options[selector.selectedIndex].text;
-    const user = document.getElementById('rdp-user').value.trim();
-    const pass = document.getElementById('rdp-pass').value;
-    const savePass = document.getElementById('rdp-save-pass') ? document.getElementById('rdp-save-pass').checked : false;
+    if (!selector || selector.selectedIndex < 0) return;
 
+    const hostKey = selector.value;
+    const selectedOpt = selector.options[selector.selectedIndex];
+    const hostName = selectedOpt.text.split('(')[0].trim() || selectedOpt.text;
+    const hasSavedPassword = selectedOpt.getAttribute('data-has-password') === '1';
+    const hostSavedUser = (selectedOpt.getAttribute('data-username') || '').trim();
+
+    const userInput = document.getElementById('rdp-user');
+    const passInput = document.getElementById('rdp-pass');
+    const saveCheckbox = document.getElementById('rdp-save-pass');
+
+    const enteredUser = userInput ? userInput.value.trim() : '';
+    const enteredPass = passInput ? passInput.value : '';
+    const savePass = saveCheckbox ? saveCheckbox.checked : true;
+
+    // Reset attempts if host changed
+    if (currentRdpHostKey !== hostKey) {
+        currentRdpHostKey = hostKey;
+        currentAttempt = 0;
+    }
+
+    const effectiveUser = enteredUser || hostSavedUser;
+    const effectivePass = enteredPass || (hasSavedPassword ? '__SAVED__' : '');
+
+    // Requirement: "se faccio connetti a un pc che non ho messo username e password alla connessione deve chiedermeli"
+    if (!effectiveUser || !effectivePass) {
+        currentAttempt = 1;
+        openCredentialsModal({
+            hostKey: hostKey,
+            hostName: hostName,
+            user: effectiveUser,
+            attempt: 1,
+            alertMessage: null
+        });
+        return;
+    }
+
+    // Both are present, run attempt
+    if (currentAttempt === 0) {
+        currentAttempt = 1;
+    }
+
+    executeRdpConnect({
+        hostKey: hostKey,
+        hostName: hostName,
+        username: effectiveUser,
+        password: enteredPass,
+        savePassword: savePass
+    });
+}
+
+function executeRdpConnect(params) {
     const overlay = document.getElementById('connection-overlay');
     const title = document.getElementById('connecting-title');
     const sub = document.getElementById('connecting-sub');
 
-    title.innerText = `Connessione a ${hostName}...`;
-    sub.innerText = "Negoziazione sessione RDP protetta su Tailscale";
+    title.innerText = `Connessione a ${params.hostName}...`;
+    sub.innerText = `Verifica credenziali e avvio sessione (Tentativo ${currentAttempt} di ${MAX_RDP_ATTEMPTS})`;
     overlay.style.display = 'flex';
     isConnecting = true;
 
@@ -235,10 +529,10 @@ function startConnection() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            host_key: hostKey,
-            username: user,
-            password: pass,
-            save_password: savePass
+            host_key: params.hostKey,
+            username: params.username,
+            password: params.password,
+            save_password: params.savePassword
         })
     })
     .then(res => res.json())
@@ -246,19 +540,14 @@ function startConnection() {
         if (!data.success) {
             overlay.style.display = 'none';
             isConnecting = false;
+            currentAttempt = 0;
             showModal("Errore Connessione", data.message || "Impossibile avviare RDP");
-        } else {
-            const selectedOpt = selector.options[selector.selectedIndex];
-            if (savePass && pass) {
-                selectedOpt.setAttribute('data-has-password', '1');
-                selectedOpt.setAttribute('data-username', user);
-            }
-            onHostSelected();
         }
     })
     .catch(err => {
         overlay.style.display = 'none';
         isConnecting = false;
+        currentAttempt = 0;
         showModal("Errore di Rete", "Errore di comunicazione con il servizio locale.");
     });
 }
@@ -268,10 +557,12 @@ function cancelConnection() {
     .then(() => {
         document.getElementById('connection-overlay').style.display = 'none';
         isConnecting = false;
+        currentAttempt = 0;
     })
     .catch(() => {
         document.getElementById('connection-overlay').style.display = 'none';
         isConnecting = false;
+        currentAttempt = 0;
     });
 }
 
@@ -281,28 +572,84 @@ setInterval(() => {
     .then(res => res.json())
     .then(data => {
         const overlay = document.getElementById('connection-overlay');
+        const selector = document.getElementById('host-selector');
+        const selectedOpt = selector ? selector.options[selector.selectedIndex] : null;
+        const hostName = selectedOpt ? (selectedOpt.text.split('(')[0].trim() || selectedOpt.text) : 'PC Remoto';
+        const hostKey = selector ? selector.value : currentRdpHostKey;
+
         if (data.state === 'CONNECTED') {
             overlay.style.display = 'flex';
             document.getElementById('connecting-title').innerText = `Sessione attiva: ${data.host || ''}`;
             document.getElementById('connecting-sub').innerText = "Sessione FreeRDP in esecuzione a tutto schermo.";
+
+            // Connection succeeded! Reset retry counter
+            currentAttempt = 0;
+
+            const credModal = document.getElementById('credentials-modal');
+            if (credModal) credModal.style.display = 'none';
+
+            // If save password was checked and we provided credentials, update dropdown attributes
+            const mainSave = document.getElementById('rdp-save-pass');
+            const mainPass = document.getElementById('rdp-pass');
+            const mainUser = document.getElementById('rdp-user');
+            if (selectedOpt && mainSave && mainSave.checked && mainPass && mainPass.value) {
+                selectedOpt.setAttribute('data-has-password', '1');
+                if (mainUser && mainUser.value) {
+                    selectedOpt.setAttribute('data-username', mainUser.value.trim());
+                }
+                onHostSelected();
+            }
         } else if (data.state === 'IDLE' && isConnecting) {
             overlay.style.display = 'none';
             isConnecting = false;
+
             if (data.error) {
-                showModal("Disconnessione RDP", data.error);
-                if (data.error.includes("NLA") || data.error.includes("Autenticazione") || data.error.includes("Credenziali")) {
-                    const box = document.getElementById('credentials-box');
-                    if (box) box.style.display = 'block';
-                    const userInput = document.getElementById('rdp-user');
-                    const passInput = document.getElementById('rdp-pass');
-                    setTimeout(() => {
-                        if (userInput && !userInput.value) {
-                            userInput.focus();
-                        } else if (passInput) {
-                            passInput.focus();
-                        }
-                    }, 200);
+                const isAuth = isAuthFailure(data);
+
+                if (isAuth) {
+                    // "se sbaglio mi fa riprovare per 3 volte"
+                    if (currentAttempt < MAX_RDP_ATTEMPTS) {
+                        currentAttempt++;
+                        const remaining = MAX_RDP_ATTEMPTS - currentAttempt + 1;
+                        const alertMsg = (currentAttempt === MAX_RDP_ATTEMPTS)
+                            ? `Nome utente o password non corretti. Ultimo tentativo disponibile!`
+                            : `Nome utente o password non corretti. Riprova (${remaining} tentativi rimasti).`;
+
+                        const curUser = (document.getElementById('rdp-user')?.value || '').trim() ||
+                                        (selectedOpt?.getAttribute('data-username') || '');
+
+                        openCredentialsModal({
+                            hostKey: hostKey,
+                            hostName: hostName,
+                            user: curUser,
+                            attempt: currentAttempt,
+                            alertMessage: alertMsg
+                        });
+                    } else {
+                        // Max attempts (3 of 3) exhausted
+                        const failedHostKey = hostKey;
+                        currentAttempt = 0;
+                        closeCredentialsModal();
+
+                        // Call backend to purge bad password from host config if it was saved
+                        fetch('/api/rdp/reset-failed-credentials', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ host_key: failedHostKey })
+                        }).catch(() => {});
+
+                        showModal(
+                            "Autenticazione Fallita",
+                            `Numero massimo di tentativi raggiunto (3 di 3). Impossibile accedere a "${hostName}" con le credenziali specificate. Verifica nome utente e password.`
+                        );
+                    }
+                } else {
+                    currentAttempt = 0;
+                    closeCredentialsModal();
+                    showModal("Disconnessione RDP", data.error);
                 }
+            } else {
+                currentAttempt = 0;
             }
         }
     })

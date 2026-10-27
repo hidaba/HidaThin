@@ -5,6 +5,17 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.21] - 2026-10-27
+
+### Aggiunto
+- **Richiesta Credenziali Interattiva alla Connessione e Gestione 3 Tentativi RDP (`templates/index.html`, `static/css/style.css`, `app/rdp.py`, `app/main.py`)**:
+  - Alla pressione del pulsante "CONNETTI" verso un PC remoto senza credenziali preconfigurate (nome utente o password non salvati o mancanti), l'interfaccia apre automaticamente un modale per richiedere Nome Utente e Password Windows.
+  - Aggiunto pulsante visibilità password (👁/🙈) per facilitare l'inserimento su touchscreen o tastiere compatte.
+  - Implementata la gestione con ripetizione fino a 3 tentativi in caso di password o nome utente errati: il sistema rileva lo stato di autenticazione fallita (FreeRDP status ed exit code 134, 145, 133, 148, 154, 155) e consente all'utente di riprovare con indicatore visivo a step ("Tentativo 1 di 3", "Tentativo 2 di 3", "Tentativo 3 di 3 (Ultimo)").
+  - Raggiunti 3 tentativi falliti, il ciclo di connessione si arresta con notifica all'utente e reset automatico per prevenire blocchi dell'account remoto.
+  - Aggiunto endpoint backend `/api/rdp/reset-failed-credentials` per eliminare credenziali non valide memorizzate se tutti i tentativi falliscono.
+  - Aggiunta suite di test automatizzati `tests/test_rdp_auth_retry.py` (T29, T30, T31).
+
 ## [0.2.20] - 2026-10-27
 
 ### Aggiunto
