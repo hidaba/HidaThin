@@ -229,9 +229,19 @@ class NativeLauncherApp:
     # --- 2. Central Card UI (Faithful 1:1 match to screen_clean.png) ---
 
     def _build_center_card_ui(self):
-        # Outer screen centering container
-        self.center_container = tk.Frame(self.root, bg=COLOR_BG)
+        # Outer screen centering container with subtle cyberpunk background
+        self.center_container = tk.Canvas(self.root, bg=COLOR_BG, highlightthickness=0)
         self.center_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        self.bg_image = None
+        self.bg_img_id = None
+        bg_path = os.path.join(BASE_DIR, "static", "img", "cyberpunk_bg.png")
+        if os.path.exists(bg_path):
+            try:
+                self.bg_image = tk.PhotoImage(file=bg_path)
+                self.bg_img_id = self.center_container.create_image(0, 0, image=self.bg_image, anchor=tk.CENTER)
+            except Exception as e:
+                logger.warning(f"Could not load cyberpunk background image: {e}")
 
         # Central Card Container (max-width ~620px)
         self.card_main = tk.Frame(
@@ -242,8 +252,9 @@ class NativeLauncherApp:
             padx=32,
             pady=28
         )
-        # Center horizontally and vertically in parent
-        self.card_main.place(relx=0.5, rely=0.48, anchor=tk.CENTER, width=620)
+        self.card_window_id = self.center_container.create_window(0, 0, window=self.card_main, anchor=tk.CENTER, width=620)
+
+        self.center_container.bind("<Configure>", self._on_canvas_resize)
 
         # A. Status Grid (2 Columns: STATO WI-FI & STATO TAILSCALE)
         self.status_grid = tk.Frame(self.card_main, bg=COLOR_CARD)
@@ -607,6 +618,14 @@ class NativeLauncherApp:
                 command=cmd
             )
             btn_n.pack(side=tk.LEFT, padx=3)
+
+    def _on_canvas_resize(self, event):
+        cx = event.width // 2
+        cy = event.height // 2
+        if self.bg_img_id and self.bg_image:
+            self.center_container.coords(self.bg_img_id, cx, cy)
+        if hasattr(self, "card_window_id"):
+            self.center_container.coords(self.card_window_id, cx, cy)
 
     # --- UI Helpers & Placeholder logic ---
 

@@ -28,6 +28,7 @@ e questo progetto segue il versionamento `0.2.x`.
   - Implementato il nuovo Launcher Nativo ultra-leggero in Python/Tkinter in sostituzione di Chromium Kiosk UI come motore grafico locale predefinito (`ui.mode: native`).
   - Footprint di memoria ridotto da oltre 300 MB a circa 25 MB RAM (< 10% del consumo di Chromium) e tempo di caricamento abbattuto da 5-7 secondi a meno di 250 ms.
   - Supporto per griglia postazioni remote con indicazione dello stato di raggiungibilità in tempo reale, gestione credenziali interattiva/persistente, pill di stato Wi-Fi e Tailscale, modale di configurazione Wi-Fi con scansione reti, dialoghi di conferma per spegnimento e riavvio.
+  - Integrato sfondo tenue cyberpunk (`cyberpunk_bg.png`) su Canvas Tkinter e feh root window, attenuando la luminosità per garantire perfetto contrasto ed estetica cyberpunk ad alta leggibilità.
   - Supporto integrato al conto alla rovescia Direct-to-RDP con pulsante immediato per annullare l'autoconnessione locale.
   - Coordinamento completo con FreeRDP: il launcher si nasconde (`root.withdraw()`) durante la sessione a schermo intero e si ripristina istantaneamente alla chiusura (`root.deiconify()`).
   - Il server Flask rimane attivo in background su porta 8080 per amministrazione e diagnostica remota (LAN / Tailscale).

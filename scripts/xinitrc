@@ -18,13 +18,15 @@ PYTHONPATH="$TC_DIR" python3 -c "from app.system import apply_overscan; apply_ov
 # Set standard left pointer cursor to eliminate the default raw X11 'X' font cursor
 xsetroot -cursor_name left_ptr &
 
-# Set seamless splash background immediately on X11 root window to eliminate black screen
-SPLASH_IMG="/opt/thinclient/static/img/cyberpunk_splash.jpg"
+# Set seamless subtle cyberpunk background immediately on X11 root window to eliminate black screen
+SPLASH_IMG="/opt/thinclient/static/img/cyberpunk_bg.png"
+[ -f "$SPLASH_IMG" ] || SPLASH_IMG="$(cd "$(dirname "$0")/.." && pwd)/static/img/cyberpunk_bg.png"
+[ -f "$SPLASH_IMG" ] || SPLASH_IMG="/opt/thinclient/static/img/cyberpunk_splash.jpg"
 [ -f "$SPLASH_IMG" ] || SPLASH_IMG="$(cd "$(dirname "$0")/.." && pwd)/static/img/cyberpunk_splash.jpg"
 if command -v feh >/dev/null 2>&1 && [ -f "$SPLASH_IMG" ]; then
     feh --bg-fill "$SPLASH_IMG" &
 else
-    xsetroot -solid "#0f172a" -cursor_name left_ptr &
+    xsetroot -solid "#0b1120" -cursor_name left_ptr &
 fi
 
 # Start Openbox window manager
