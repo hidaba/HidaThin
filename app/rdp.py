@@ -238,7 +238,11 @@ class RDPManager:
 
             settings = get_settings()
             profile = settings.get("profile", "balanced")
-            color_depth = str(settings.get("color_depth", 24))
+            color_depth = str(settings.get("color_depth", 32))
+            # 32-bit color depth is required for full ClearType font smoothing and subpixel antialiasing
+            if color_depth == "24" and profile in ("balanced", "quality"):
+                color_depth = "32"
+
             sound_enabled = settings.get("sound", True)
             fullscreen = settings.get("fullscreen", True)
 
@@ -273,7 +277,9 @@ class RDPManager:
                 f"/bpp:{color_depth}",
                 "/gdi:hw",
                 "/cache:bitmap:on,offscreen:on",
-                "+clipboard"
+                "+clipboard",
+                "+fonts",
+                "+aero"
             ]
 
             if effective_user:
@@ -295,7 +301,6 @@ class RDPManager:
                 cmd.extend([
                     "/network:broadband",
                     "/compression",
-                    "/gfx:RFX,thin-client:on,small-cache:on",
                     "-themes",
                     "-wallpaper",
                     "-menu-anims",
@@ -306,16 +311,16 @@ class RDPManager:
                     "/network:lan",
                     "/compression",
                     "+themes",
-                    "/gfx:AVC420"
+                    "/gfx:AVC444,AVC420",
+                    "/frame-ack:1"
                 ])
-            else:  # balanced
+            else:  # balanced (default: pixel-perfect crisp ClearType fonts, lowest CPU overhead)
                 cmd.extend([
-                    "/network:broadband",
+                    "/network:auto",
                     "/compression",
-                    "/gfx:progressive,thin-client:on,small-cache:on",
+                    "+themes",
                     "-wallpaper",
-                    "-menu-anims",
-                    "-window-drag"
+                    "-menu-anims"
                 ])
 
             if sound_enabled:

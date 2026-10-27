@@ -200,7 +200,7 @@ class NativeLauncherApp:
 
         btn_wifi = tk.Button(
             actions_frame,
-            text="📶 Wi-Fi",
+            text="Wi-Fi",
             font=self.font_btn_sm,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE_LIGHT,
@@ -217,7 +217,7 @@ class NativeLauncherApp:
 
         btn_admin = tk.Button(
             actions_frame,
-            text="🌐 Web Admin",
+            text="Web Admin",
             font=self.font_btn_sm,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE_LIGHT,
@@ -234,7 +234,7 @@ class NativeLauncherApp:
 
         btn_reboot = tk.Button(
             actions_frame,
-            text="🔄 Riavvia",
+            text="Riavvia",
             font=self.font_btn_sm,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE_LIGHT,
@@ -251,7 +251,7 @@ class NativeLauncherApp:
 
         btn_power = tk.Button(
             actions_frame,
-            text="⏻ Spegni",
+            text="Spegni",
             font=self.font_btn_sm,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_DANGER,
@@ -306,7 +306,7 @@ class NativeLauncherApp:
 
         lbl_sec = tk.Label(
             sec_header,
-            text="🖥️  POSTAZIONI REMOTE DISPONIBILI",
+            text="POSTAZIONI REMOTE DISPONIBILI",
             font=self.font_card_title,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BG
@@ -366,7 +366,7 @@ class NativeLauncherApp:
         # Filesystem Status (Center)
         self.lbl_fs_status = tk.Label(
             self.footer_frame,
-            text="🛡️ Filesystem: Verifica...",
+            text="● Filesystem: Verifica...",
             font=self.font_subtitle,
             fg=COLOR_SUCCESS,
             bg=COLOR_SURFACE
@@ -448,9 +448,9 @@ class NativeLauncherApp:
 
         # Update FS Status
         if fs_info.get("root_ro"):
-            self.lbl_fs_status.config(text="🛡️ Filesystem: Sola Lettura (RO - Protetto)", fg=COLOR_SUCCESS)
+            self.lbl_fs_status.config(text="● Filesystem: Sola Lettura (RO - Protetto)", fg=COLOR_SUCCESS)
         else:
-            self.lbl_fs_status.config(text="⚠️ Filesystem: Scrittura (RW - Modificabile)", fg=COLOR_WARNING)
+            self.lbl_fs_status.config(text="● Filesystem: Scrittura (RW - Modificabile)", fg=COLOR_WARNING)
 
         # Update Web Hint with Tailscale or primary IP
         primary_ip = ts.get("ip") or net.get("primary_ip") or "127.0.0.1"
@@ -519,7 +519,7 @@ class NativeLauncherApp:
 
         title = tk.Label(
             header,
-            text=f"🖥️  {host.get('name') or key}",
+            text=f"◆  {host.get('name') or key}",
             font=self.font_card_title,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE,
@@ -593,7 +593,7 @@ class NativeLauncherApp:
 
         btn_cred = tk.Button(
             btn_bar,
-            text="🔑 Credenziali",
+            text="Opzioni...",
             font=self.font_btn_sm,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE_LIGHT,
@@ -636,7 +636,7 @@ class NativeLauncherApp:
         self.banner_frame.pack(side=tk.TOP, fill=tk.X, before=self.content_container)
         self.banner_frame.config(bg="#0369a1")
         self.banner_label.config(
-            text=f"🚀 Avvio automatico verso '{default_name}' tra {self.auto_connect_remaining} secondi...",
+            text=f"Avvio automatico verso '{default_name}' tra {self.auto_connect_remaining} secondi...",
             bg="#0369a1"
         )
         self.banner_btn.config(text="✖ Annulla Avvio Automatico", state=tk.NORMAL)
@@ -650,7 +650,7 @@ class NativeLauncherApp:
         if self.auto_connect_remaining > 0:
             default_name = self.hosts_data.get(self.default_host_key, {}).get("name") or self.default_host_key
             self.banner_label.config(
-                text=f"🚀 Avvio automatico verso '{default_name}' tra {self.auto_connect_remaining} secondi..."
+                text=f"Avvio automatico verso '{default_name}' tra {self.auto_connect_remaining} secondi..."
             )
             self.auto_connect_remaining -= 1
             self.direct_rdp_timer = self.root.after(1000, self._countdown_tick)
@@ -682,7 +682,7 @@ class NativeLauncherApp:
     def _do_connect(self, host_key, username=None, password=None, save_password=False):
         """Initiates RDP connection via REST API and monitors lifecycle."""
         host_name = self.hosts_data.get(host_key, {}).get("name") or host_key
-        self.show_banner(f"🔄 Connessione a {host_name} in corso...", bg=COLOR_ACCENT)
+        self.show_banner(f"Connessione a {host_name} in corso...", bg=COLOR_ACCENT)
 
         def connect_worker():
             payload = {
@@ -777,7 +777,7 @@ class NativeLauncherApp:
         # Header
         lbl_h = tk.Label(
             dialog,
-            text=f"🔑  {host_info.get('name') or host_key}",
+            text=f"Credenziali per {host_info.get('name') or host_key}",
             font=self.font_card_title,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE
@@ -879,7 +879,7 @@ class NativeLauncherApp:
 
         lbl_h = tk.Label(
             dialog,
-            text="📶  Reti Wi-Fi Disponibili",
+            text="Reti Wi-Fi Disponibili",
             font=self.font_card_title,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE
@@ -953,7 +953,7 @@ class NativeLauncherApp:
                 return
             status_lbl.config(text=f"Trovate {len(networks)} reti. Selezionane una:", fg=COLOR_TEXT_MUTED)
             for n in networks:
-                sec = "🔒" if n.get("security") else "🔓"
+                sec = "[PROTETTA]" if n.get("security") else "[APERTA]"
                 sig = f"{n.get('signal', 0)}%"
                 listbox.insert(tk.END, f"{n.get('ssid')} ({sec} Segnale: {sig})")
 
@@ -986,7 +986,7 @@ class NativeLauncherApp:
 
         btn_rescan = tk.Button(
             btn_box,
-            text="🔄 Riscansiona",
+            text="Riscansiona",
             font=self.font_btn_sm,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE_LIGHT,
@@ -1027,7 +1027,7 @@ class NativeLauncherApp:
 
         lbl_h = tk.Label(
             dialog,
-            text="🌐  Amministrazione e Diagnostica Avanzata",
+            text="Amministrazione e Diagnostica Avanzata",
             font=self.font_card_title,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_SURFACE

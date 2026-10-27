@@ -2,7 +2,7 @@ version: 1
 profile: "balanced"       # performance | balanced | quality
 resolution: "auto"        # auto | 1920x1080 | 1600x900 | 1280x720
 overscan: "auto"          # auto (EDID) | none (1:1 PC) | light (~2.5%) | medium (~5%)
-color_depth: 24           # 16 | 24 | 32
+color_depth: 32           # 16 | 24 | 32 (32 consigliato per ClearType)
 sound: true               # true | false
 auto_reconnect: true      # true | false
 max_reconnect_retries: 3

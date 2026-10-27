@@ -18,7 +18,7 @@ DEFAULT_SETTINGS = {
     "profile": "balanced",
     "resolution": "auto",
     "overscan": "auto",
-    "color_depth": 24,
+    "color_depth": 32,
     "sound": True,
     "auto_reconnect": True,
     "max_reconnect_retries": 3,
