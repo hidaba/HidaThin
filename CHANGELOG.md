@@ -5,6 +5,15 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.22] - 2026-10-27
+
+### Risolto & Perfezionato
+- **Compensazione Universale Overscan Display X11 (`app/system.py`, `templates/settings.html`, `templates/diagnostics.html`)**:
+  - Implementato lo scaling del canvas tramite matrice di trasformazione coordinate X11 (`xrandr --transform`) con filtro bilineare sull'Hardware Video Scaler (HVS), garantendo il corretto rientro dei bordi su tutte le GPU (incluso Broadcom VC4 su Raspberry Pi 3 privo di controllo underscan via DRM properties).
+  - Introdotto l'auto-rilevamento intelligente di schermi TV rispetto a monitor PC analizzando i blocchi descrittori EDID dei principali produttori (Samsung, LG, Sony, Philips, Panasonic, TCL, Hisense) e la presenza di modalità interlacciate (1080i, 576i, 480i).
+  - Introdotta la nuova opzione `heavy` (Massima ~7.5% di riduzione margini: 72px orizzontale, 40px verticale) nel menu a tendina per TV con zoom ottico aggressivo.
+  - Abilitata la proprietà `Broadcast RGB: Full` sulle uscite supportate per comunicare ai televisori la gamma colore completa PC, inducendoli a disattivare automaticamente l'overscan broadcast.
+
 ## [0.2.21] - 2026-10-27
 
 ### Aggiunto
