@@ -11,13 +11,13 @@
                 <label for="setting-profile"><strong>Profilo RDP:</strong></label>
                 <select id="setting-profile" class="input-text">
                     <option value="performance" {% if settings.profile == 'performance' %}selected{% endif %}>
-                        Prestazioni Elevate (Massima fluidità, compressione elevata, effetti Windows disabilitati, 16-bit)
+                        Prestazioni Elevate (Massima fluidità, compressione elevata, effetti Windows disabilitati)
                     </option>
                     <option value="balanced" {% if settings.profile == 'balanced' %}selected{% endif %}>
-                        Bilanciato - Consigliato (Font nitidi, audio attivo, cache bitmap e glifi)
+                        Bilanciato - Consigliato (Font nitidi ClearType, cache bitmap, minima CPU)
                     </option>
                     <option value="quality" {% if settings.profile == 'quality' %}selected{% endif %}>
-                        Qualità Massima (GFX attivo, 32-bit colore, effetti visivi completi)
+                        Qualità Massima (GFX AVC444 ad alta fedeltà colore, effetti visivi completi)
                     </option>
                 </select>
             </div>
@@ -38,9 +38,9 @@
                 <div class="form-group">
                     <label for="setting-bpp"><strong>Profondità Colore (bpp):</strong></label>
                     <select id="setting-bpp" class="input-text">
-                        <option value="16" {% if settings.color_depth == 16 %}selected{% endif %}>16 bit (Prestazioni massime)</option>
-                        <option value="24" {% if settings.color_depth == 24 %}selected{% endif %}>24 bit (Bilanciato predefinito)</option>
-                        <option value="32" {% if settings.color_depth == 32 %}selected{% endif %}>32 bit (Qualità fedele)</option>
+                        <option value="16" {% if settings.color_depth == 16 %}selected{% endif %}>16 bit (Bassa banda)</option>
+                        <option value="24" {% if settings.color_depth == 24 %}selected{% endif %}>24 bit (Standard)</option>
+                        <option value="32" {% if settings.color_depth == 32 %}selected{% endif %}>32 bit (Consigliato - Testo nitido & ClearType)</option>
                     </select>
                 </div>
             </div>
@@ -243,7 +243,7 @@ function saveSettingsForm(e) {
         profile: document.getElementById('setting-profile').value,
         resolution: document.getElementById('setting-resolution').value,
         overscan: document.getElementById('setting-overscan').value,
-        color_depth: parseInt(document.getElementById('setting-bpp').value) || 24,
+        color_depth: parseInt(document.getElementById('setting-bpp').value) || 32,
         sound: document.getElementById('setting-sound').checked,
         auto_reconnect: document.getElementById('setting-reconnect').checked,
         fullscreen: true
