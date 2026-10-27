@@ -24,7 +24,7 @@ def test_launcher_initialization(launcher_instance):
     assert app.windowed is True
     assert app.server_url == "http://127.0.0.1:8080"
     assert app.is_connected_rdp is False
-    assert app.root.title().startswith("HidaThin Launcher")
+    assert "Thin Client RDP" in app.root.title()
 
 def test_launcher_apply_data(launcher_instance):
     app = launcher_instance
@@ -32,7 +32,7 @@ def test_launcher_apply_data(launcher_instance):
     mock_status = {
         "network": {
             "primary_ip": "192.168.1.50",
-            "wifi": {"connected": True, "ssid": "OfficeWiFi", "ip": "192.168.1.50"}
+            "wifi": {"connected": True, "ssid": "OfficeWiFi", "ip": "192.168.1.50", "signal": 75}
         },
         "tailscale": {
             "connected": True,
@@ -46,15 +46,27 @@ def test_launcher_apply_data(launcher_instance):
         "pc-mimmo": {"name": "PC Mimmo", "hostname": "pc-mimmo", "port": 3389, "has_password": True},
         "pc-studio": {"name": "PC Studio", "hostname": "100.64.0.1", "port": 3389, "has_password": False}
     }
-    mock_fs = {"root_ro": True}
 
-    app._apply_data(mock_status, mock_hosts, default_host="pc-mimmo", fs_info=mock_fs, initial=False)
+    app._apply_data(mock_status, mock_hosts, default_host="pc-mimmo", initial=False)
 
-    assert "OfficeWiFi" in app.lbl_net_status.cget("text")
-    assert "100.68.91.18" in app.lbl_ts_status.cget("text")
-    assert "Sola Lettura" in app.lbl_fs_status.cget("text")
+    assert app.lbl_wifi_val.cget("text") == "OfficeWiFi"
+    assert app.lbl_ts_val.cget("text") == "CONNESSO"
+    assert "100.68.91.18" in app.lbl_footer_info.cget("text")
     assert "pc-mimmo" in app.hosts_data
     assert "pc-studio" in app.hosts_data
+    assert len(app.host_combo["values"]) == 2
+
+def test_credentials_toggle(launcher_instance):
+    app = launcher_instance
+    assert app.credentials_expanded is False
+
+    app.toggle_credentials_box()
+    assert app.credentials_expanded is True
+    assert "▲" in app.btn_toggle_cred.cget("text")
+
+    app.toggle_credentials_box()
+    assert app.credentials_expanded is False
+    assert "▼" in app.btn_toggle_cred.cget("text")
 
 def test_direct_rdp_countdown_and_cancel(launcher_instance):
     app = launcher_instance
@@ -64,7 +76,7 @@ def test_direct_rdp_countdown_and_cancel(launcher_instance):
     # Start countdown
     app._start_direct_rdp_countdown()
     assert app.direct_rdp_timer is not None
-    assert "Avvio automatico" in app.banner_label.cget("text")
+    assert "Avvio automatico" in app.lbl_conn_title.cget("text")
 
     # Cancel countdown
     app.cancel_direct_rdp()
@@ -78,7 +90,6 @@ def test_rdp_connect_flow_and_window_withdraw(launcher_instance):
     with patch.object(app, "_start_rdp_session_monitor") as mock_monitor, \
          patch.object(app.root, "withdraw") as mock_withdraw:
 
-        # Simulate successful connect
         app._handle_connect_result({"success": True}, "PC Mimmo")
 
         assert app.is_connected_rdp is True
