@@ -5,6 +5,18 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.26] - 2026-11-20
+
+### Ottimizzato (Tuning RDP & Sistema Derivato da Reverse-Engineering WTware 6.2.92)
+- **Pipeline RDP, Frame Acknowledgement a Doppio Buffer e Performance Flags WTware (`app/rdp.py`, `tests/test_rdp_lifecycle.py`)**:
+  - **Double-Buffered Frame Ack (`/frame-ack:2`)**: Impostato `CAPSETTYPE_FRAME_ACKNOWLEDGE` con `maxUnacknowledgedFrameCount = 2` (identico a WTware `sbin/rdpclient`), mantenendo la pipeline grafica piena con 1 frame in decodifica e 1 frame in volo ed eliminando sia lo stallo ping-pong di `/frame-ack:1` sia il bufferbloat di frame non limitati.
+  - **Performance Flags WTware (`PFlags = 0x1AF` -> `-window-drag`, `-wallpaper`, `-menu-anims`, `+fonts`, `+aero`)**: Disabilitato il ridisegno completo durante il trascinamento delle finestre (`-window-drag` / `PERF_DISABLE_FULLWINDOWDRAG = 0x02`) anche nei profili `balanced` e `quality`, mostrando il contorno istantaneo della finestra durante lo spostamento ed eliminando gli scatti sulla CPU del Raspberry Pi, pur mantenendo attivi ClearType (`+fonts`) e Desktop Composition DWM (`+aero`).
+  - **Flag `RDPEGFX` `small-cache:on,thin-client:off` e Canale Video Geometrico (`+video`)**: Aggiornato il profilo `quality` con `/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off,small-cache:on,thin-client:off` + `+video` per replicare i flag `RDPGFX_CAPS_FLAG_SMALL_CACHE (0x02)` + `RDPGFX_CAPS_FLAG_AVC_THINCLIENT (0x40)` di WTware (cache superfici limitata a 16 MB in RAM e redirect geometrico dei flussi video).
+  - **Audio Dinamico Compresso AAC/ADPCM (`/sound:sys:alsa,format:1,quality:dynamic`)**: Abilitata la negoziazione dinamica dei codec audio compressi su ALSA per ridurre il consumo di banda e prevenire micro-interruzioni audio.
+- **Ottimizzazioni Firmware Boot (`config.txt`) e Stack TCP Low-Latency (`install.sh`)**:
+  - Aggiunti `arm_boost=1` e `avoid_warnings=2` in `/boot/firmware/config.txt` per sbloccare la frequenza boost massima del SoC e impedire all'overlay firmware di sottotensione di interrompere il page-flipping KMS/DRM.
+  - Aggiunto profilo `/etc/sysctl.d/99-rdp-network.conf` (`net.ipv4.tcp_low_latency=1`, `tcp_keepalive_time=15`, `tcp_keepalive_intvl=5`, `tcp_keepalive_probes=3`, `tcp_fin_timeout=15`) per minimizzare la latenza dei pacchetti TCP RDP.
+
 ## [0.2.25] - 2026-11-20
 
 ### Risolto & Perfezionato

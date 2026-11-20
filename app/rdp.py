@@ -277,6 +277,7 @@ class RDPManager:
                 f"/bpp:{color_depth}",
                 "/gdi:hw",
                 "/cache:bitmap:on,offscreen:on,glyph:on",
+                "/frame-ack:2",
                 "/scale:100",
                 "/scale-desktop:100",
                 "/scale-device:100",
@@ -312,28 +313,33 @@ class RDPManager:
                     "-window-drag"
                 ])
             elif profile == "quality":
-                # True 4:4:4 full-chroma AVC444 with lossless Planar fallback; explicitly disable 4:2:0 AVC420, RFX, and Progressive
-                cmd.extend([
-                    "/network:lan",
-                    "/compression-level:2",
-                    "+themes",
-                    "+window-drag",
-                    "+menu-anims",
-                    "/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off"
-                ])
-            else:  # balanced (default: 100% lossless 32-bit GDI/Planar, pixel-perfect ClearType fonts, zero 4:2:0 subsampling)
-                # Note: In FreeRDP 3.x, /network:auto forcibly enables GfxH264 (AVC420 4:2:0) and RemoteFxCodec.
-                # Using /network:lan keeps SupportGraphicsPipeline=0, GfxH264=0, RemoteFxCodec=0, AllowFontSmoothing=1.
+                # WTware-derived RDPEGFX tuning: True 4:4:4 AVC444 with small-cache:on (0x02) and thin-client:off (~0x01),
+                # geometry-tracked video redirection (+video), and outline window drag (-window-drag) for tear-free moves
                 cmd.extend([
                     "/network:lan",
                     "/compression-level:2",
                     "+themes",
                     "-wallpaper",
-                    "-menu-anims"
+                    "-menu-anims",
+                    "-window-drag",
+                    "/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off,small-cache:on,thin-client:off",
+                    "+video"
+                ])
+            else:  # balanced (default: 100% lossless 32-bit GDI/Planar, pixel-perfect ClearType fonts, WTware PFlags=0x1AF)
+                # Note: In FreeRDP 3.x, /network:auto forcibly enables GfxH264 (AVC420 4:2:0) and RemoteFxCodec.
+                # Using /network:lan keeps SupportGraphicsPipeline=0, GfxH264=0, RemoteFxCodec=0, AllowFontSmoothing=1.
+                # Adding -window-drag matches WTware PFlags=0x1AF (PERF_DISABLE_FULLWINDOWDRAG) to eliminate window move lag.
+                cmd.extend([
+                    "/network:lan",
+                    "/compression-level:2",
+                    "+themes",
+                    "-wallpaper",
+                    "-menu-anims",
+                    "-window-drag"
                 ])
 
             if sound_enabled:
-                cmd.append("/sound:sys:alsa")
+                cmd.append("/sound:sys:alsa,format:1,quality:dynamic")
             else:
                 cmd.append("-sound")
 

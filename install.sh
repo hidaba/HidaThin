@@ -244,11 +244,19 @@ if [ -f "$INSTALL_DIR/config/50-mouse.conf" ]; then
     echo -e "      ${GREEN}[OK]${NC} Configurazione puntatore Xorg (flat profile 1:1) applicata."
 fi
 
-# B. Swappiness Tuning (protect MicroSD)
+# B. Swappiness & TCP Low-Latency RDP Tuning (WTware-derived transport settings)
 mkdir -p /etc/sysctl.d
 echo "vm.swappiness=10" > /etc/sysctl.d/99-swappiness.conf
+cat << 'EOF' > /etc/sysctl.d/99-rdp-network.conf
+net.ipv4.tcp_low_latency=1
+net.ipv4.tcp_keepalive_time=15
+net.ipv4.tcp_keepalive_intvl=5
+net.ipv4.tcp_keepalive_probes=3
+net.ipv4.tcp_fin_timeout=15
+EOF
 sysctl -p /etc/sysctl.d/99-swappiness.conf >/dev/null 2>&1 || true
-echo -e "      ${GREEN}[OK]${NC} vm.swappiness impostato a 10 (riduzione scritture MicroSD)."
+sysctl -p /etc/sysctl.d/99-rdp-network.conf >/dev/null 2>&1 || true
+echo -e "      ${GREEN}[OK]${NC} vm.swappiness=10 e tuning TCP low-latency RDP applicati."
 
 # C. Logrotate configuration
 if [ -f "$INSTALL_DIR/config/thinclient.logrotate" ]; then
@@ -257,7 +265,7 @@ if [ -f "$INSTALL_DIR/config/thinclient.logrotate" ]; then
     echo -e "      ${GREEN}[OK]${NC} Logrotate configurato per i log di sessione RDP/UI."
 fi
 
-# D. Raspberry Pi Boot Configuration (config.txt -> gpu_mem=128)
+# D. Raspberry Pi Boot Configuration (config.txt -> gpu_mem=128, arm_boost=1, avoid_warnings=2)
 CONFIG_TXT=""
 if [ -f /boot/firmware/config.txt ]; then
     CONFIG_TXT="/boot/firmware/config.txt"
@@ -285,6 +293,14 @@ if [ -n "$CONFIG_TXT" ]; then
     if ! grep -q "^disable_overscan=" "$CONFIG_TXT"; then
         echo "disable_overscan=1" >> "$CONFIG_TXT"
         echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto disable_overscan=1 (disabilita overscan firmware per gestione KMS)."
+    fi
+    if ! grep -q "^arm_boost=" "$CONFIG_TXT"; then
+        echo "arm_boost=1" >> "$CONFIG_TXT"
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto arm_boost=1 (frequenza boost CPU massima)."
+    fi
+    if ! grep -q "^avoid_warnings=" "$CONFIG_TXT"; then
+        echo "avoid_warnings=2" >> "$CONFIG_TXT"
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto avoid_warnings=2 (previene interferenze overlay OSD firmware su KMS)."
     fi
 fi
 

@@ -200,10 +200,13 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
         assert "+aero" in args
         assert "/bpp:32" in args  # Promoted from 24 to 32 for ClearType
         assert "/cache:bitmap:on,offscreen:on,glyph:on" in args
+        assert "/frame-ack:2" in args
         assert "/scale:100" in args
         assert "/network:lan" in args
         assert "/compression-level:2" in args
         assert "+themes" in args
+        assert "-window-drag" in args
+        assert "/sound:sys:alsa,format:1,quality:dynamic" in args
         # Ensure /network:auto (which forces AVC420 in FreeRDP 3.x) and lossy progressive/RFX are NOT present
         assert "/network:auto" not in args
         assert not any("/gfx:progressive" in a for a in args)
@@ -227,7 +230,10 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
         args = mock_popen.call_args_list[0][0][0]
         assert "+fonts" in args
         assert "/bpp:32" in args
-        assert "/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off" in args
+        assert "/frame-ack:2" in args
+        assert "-window-drag" in args
+        assert "/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off,small-cache:on,thin-client:off" in args
+        assert "+video" in args
         assert "/network:lan" in args
 
         manager.disconnect()
