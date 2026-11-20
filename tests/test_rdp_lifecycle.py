@@ -172,12 +172,12 @@ def test_t29_rdp_target_ip_resolution_and_error_codes():
 
 def test_t30_rdp_cleartype_fonts_and_profile_tuning():
     """
-    T30: Verifica ottimizzazioni ClearType (+fonts, +aero, /bpp:32) e profili RDP.
+    T30: Verifica ottimizzazioni ClearType (+fonts, +aero, /bpp:32) e profili RDP per FreeRDP 3.x.
     Verifica:
-    1. +fonts e +aero sono sempre presenti per garantire testi nitidi e desktop compositing.
-    2. balanced profile usa /network:auto, non usa /gfx:progressive né RFX (previene sfocatura testo e carico CPU).
-    3. quality profile usa /gfx:AVC444,AVC420 con /frame-ack:1.
-    4. performance profile preserva +fonts disabilitando animazioni e drag.
+    1. +fonts, +aero, /scale:100 e /cache:bitmap:on,offscreen:on,glyph:on sono sempre presenti per testi nitidi 1:1.
+    2. balanced profile usa /network:lan (e NON /network:auto che in FreeRDP 3.x forza GfxH264 AVC420 4:2:0 e RFX lossy).
+    3. quality profile usa /gfx:AVC444:on,AVC420:off,RFX:off,progressive:off (vero 4:4:4 senza subsampling 4:2:0).
+    4. performance profile usa /network:wan (e NON /network:broadband che in FreeRDP 3.x forza AllowFontSmoothing=0).
     5. Se color_depth è 24, in balanced/quality viene automaticamente elevato a 32 per pieno supporto ClearType.
     """
     manager = RDPManager()
@@ -199,10 +199,13 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
         assert "+fonts" in args
         assert "+aero" in args
         assert "/bpp:32" in args  # Promoted from 24 to 32 for ClearType
-        assert "/cache:bitmap:on,offscreen:on" in args
-        assert "/network:auto" in args
+        assert "/cache:bitmap:on,offscreen:on,glyph:on" in args
+        assert "/scale:100" in args
+        assert "/network:lan" in args
+        assert "/compression-level:2" in args
         assert "+themes" in args
-        # Ensure lossy progressive and RFX are NOT present in balanced
+        # Ensure /network:auto (which forces AVC420 in FreeRDP 3.x) and lossy progressive/RFX are NOT present
+        assert "/network:auto" not in args
         assert not any("/gfx:progressive" in a for a in args)
         assert not any("/gfx:RFX" in a for a in args)
 
@@ -224,8 +227,7 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
         args = mock_popen.call_args_list[0][0][0]
         assert "+fonts" in args
         assert "/bpp:32" in args
-        assert "/gfx:AVC444,AVC420" in args
-        assert "/frame-ack:1" in args
+        assert "/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off" in args
         assert "/network:lan" in args
 
         manager.disconnect()
@@ -246,6 +248,8 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
         args = mock_popen.call_args_list[0][0][0]
         assert "+fonts" in args
         assert "/bpp:16" in args
+        assert "/network:wan" in args
+        assert "/network:broadband" not in args
         assert "-themes" in args
         assert "-wallpaper" in args
         assert "-menu-anims" in args

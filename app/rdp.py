@@ -276,7 +276,10 @@ class RDPManager:
                 "/cert:ignore",
                 f"/bpp:{color_depth}",
                 "/gdi:hw",
-                "/cache:bitmap:on,offscreen:on",
+                "/cache:bitmap:on,offscreen:on,glyph:on",
+                "/scale:100",
+                "/scale-desktop:100",
+                "/scale-device:100",
                 "+clipboard",
                 "+fonts",
                 "+aero"
@@ -298,26 +301,32 @@ class RDPManager:
                 cmd.append(f"/size:{res_setting}")
 
             if profile == "performance":
+                # In FreeRDP 3.x, /network:broadband forces AllowFontSmoothing=0 (disabling ClearType).
+                # /network:wan preserves AllowFontSmoothing=1 (+fonts) while keeping SupportGraphicsPipeline=0.
                 cmd.extend([
-                    "/network:broadband",
-                    "/compression",
+                    "/network:wan",
+                    "/compression-level:2",
                     "-themes",
                     "-wallpaper",
                     "-menu-anims",
                     "-window-drag"
                 ])
             elif profile == "quality":
+                # True 4:4:4 full-chroma AVC444 with lossless Planar fallback; explicitly disable 4:2:0 AVC420, RFX, and Progressive
                 cmd.extend([
                     "/network:lan",
-                    "/compression",
+                    "/compression-level:2",
                     "+themes",
-                    "/gfx:AVC444,AVC420",
-                    "/frame-ack:1"
+                    "+window-drag",
+                    "+menu-anims",
+                    "/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off"
                 ])
-            else:  # balanced (default: pixel-perfect crisp ClearType fonts, lowest CPU overhead)
+            else:  # balanced (default: 100% lossless 32-bit GDI/Planar, pixel-perfect ClearType fonts, zero 4:2:0 subsampling)
+                # Note: In FreeRDP 3.x, /network:auto forcibly enables GfxH264 (AVC420 4:2:0) and RemoteFxCodec.
+                # Using /network:lan keeps SupportGraphicsPipeline=0, GfxH264=0, RemoteFxCodec=0, AllowFontSmoothing=1.
                 cmd.extend([
-                    "/network:auto",
-                    "/compression",
+                    "/network:lan",
+                    "/compression-level:2",
                     "+themes",
                     "-wallpaper",
                     "-menu-anims"

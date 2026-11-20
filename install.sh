@@ -198,7 +198,7 @@ if [ ! -f "$INSTALL_DIR/config/settings.yaml" ]; then
 version: 1
 profile: "balanced"
 resolution: "auto"
-overscan: "auto"
+overscan: "none"
 color_depth: 32
 sound: true
 auto_reconnect: true

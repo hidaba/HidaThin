@@ -9,6 +9,9 @@ xset -dpms
 # Set 1:1 linear pointer acceleration in X11 (disable legacy acceleration curves)
 xset m 1 1
 
+# Configure Xft subpixel font antialiasing and LCD ClearType filter (96 DPI 1:1)
+printf "Xft.dpi: 96\nXft.antialias: 1\nXft.hinting: 1\nXft.hintstyle: hintslight\nXft.rgba: rgb\nXft.lcdfilter: lcddefault\n" | xrdb -merge 2>/dev/null || true
+
 # Apply display overscan and edge correction (KMS underscan) based on settings.yaml
 echo "[xinitrc] Applying display overscan and edge correction..."
 TC_DIR="/opt/thinclient"

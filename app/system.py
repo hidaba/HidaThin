@@ -17,7 +17,7 @@ DEFAULT_SETTINGS = {
     "version": 1,
     "profile": "balanced",
     "resolution": "auto",
-    "overscan": "auto",
+    "overscan": "none",
     "color_depth": 32,
     "sound": True,
     "auto_reconnect": True,
@@ -367,12 +367,11 @@ def apply_overscan(mode=None):
 
             # Determine percentage for this display
             pct = preset["pct"]
-            if pct is None:  # auto mode
-                is_tv = is_display_television(props)
-                pct = 0.05 if is_tv else 0.0
-                logger.info(f"Overscan auto-detection for {out}: is_tv={is_tv} -> pct={pct}")
+            if pct is None:  # auto mode: negotiate HDMI Broadcast RGB Full (PC 1:1 mode) without fractional rescaling
+                pct = 0.0
+                logger.info(f"Overscan auto mode for {out}: using 1:1 native pixel mapping (pct=0.0) with Broadcast RGB Full")
 
-            # 1. Apply core X11 transform matrix (guaranteed scaling across all drivers)
+            # 1. Apply core X11 transform matrix (none = 1:1 pixel-perfect native ClearType rendering)
             matrix = compute_transform_matrix(width, height, pct)
             cmd_transform = ["xrandr", "--output", out, "--transform", matrix]
             cmd_res = subprocess.run(cmd_transform, env=env, capture_output=True, text=True, timeout=3)
@@ -382,23 +381,30 @@ def apply_overscan(mode=None):
             else:
                 logger.warning(f"Errore transform matrix su {out}: {cmd_res.stderr}")
 
-            # 2. Set Broadcast RGB Full if supported to signal PC mode to TV
+            # If restoring 1:1 mapping (none/auto), ensure Screen 0 framebuffer matches exact native resolution
+            if matrix == "none" and f"current {width} x {height}" not in res.stdout:
+                subprocess.run(
+                    ["xrandr", "--output", out, "--mode", f"{width}x{height}", "--transform", "none", "--fb", f"{width}x{height}"],
+                    env=env, capture_output=True, text=True, timeout=2
+                )
+
+            # 2. Set Broadcast RGB Full if supported to signal 1:1 PC full-range RGB (0-255) mode to Monitor/TV
             if "Broadcast RGB" in props_str:
                 subprocess.run(
                     ["xrandr", "--output", out, "--set", "Broadcast RGB", "Full"],
                     env=env, capture_output=True, text=True, timeout=2
                 )
 
-            # 3. Apply DRM margins or underscan if driver supports it
+            # 3. Reset or apply DRM margins / underscan (reset to 0 when transform is active or pct=0 to prevent double-scaling)
             margin_h = round(width * pct / 2)
             margin_v = round(height * pct / 2)
             if "left margin" in props_str:
                 subprocess.run([
                     "xrandr", "--output", out,
-                    "--set", "left margin", str(min(100, margin_h)),
-                    "--set", "right margin", str(min(100, margin_h)),
-                    "--set", "top margin", str(min(100, margin_v)),
-                    "--set", "bottom margin", str(min(100, margin_v))
+                    "--set", "left margin", "0",
+                    "--set", "right margin", "0",
+                    "--set", "top margin", "0",
+                    "--set", "bottom margin", "0"
                 ], env=env, capture_output=True, text=True, timeout=2)
             elif "underscan" in props_str:
                 underscan_val = "off" if pct <= 0 else "on"

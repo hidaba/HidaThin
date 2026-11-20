@@ -1093,31 +1093,113 @@ class NativeLauncherApp:
         tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(side=tk.RIGHT)
 
     def open_settings_dialog(self):
-        """Displays settings summary and Web Admin remote access URL."""
+        """Displays interactive video quality / RDP settings and Web Admin remote access URL."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("Impostazioni")
-        dialog.geometry("500x320")
+        dialog.title("Impostazioni Qualità Video & RDP")
+        dialog.geometry("560x470")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
-        self._center_window(dialog, 500, 320)
+        self._center_window(dialog, 560, 470)
 
-        tk.Label(dialog, text="⚙  Impostazioni & Web Admin", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(20, 10))
+        tk.Label(dialog, text="⚙  Qualità Video, Nitidezza Testi & RDP", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 10))
+
+        cur_settings = {}
+        try:
+            from app.system import get_settings
+            cur_settings = get_settings()
+        except Exception:
+            cur_settings = {"profile": "balanced", "overscan": "none", "color_depth": 32}
+
+        form = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
+        form.pack(fill=tk.X)
+
+        # 1. RDP Profile
+        tk.Label(form, text="Profilo Grafico RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        profile_map = [
+            ("balanced", "Bilanciato (Consigliato - Testi nitidi ClearType Lossless 1:1)"),
+            ("quality", "Qualità Massima (AVC444 Colore 4:4:4 + Effetti Completi)"),
+            ("performance", "Prestazioni Elevate (Bassa banda, senza animazioni)"),
+        ]
+        prof_var = tk.StringVar()
+        prof_combo = ttk.Combobox(form, textvariable=prof_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        prof_combo["values"] = [label for _, label in profile_map]
+        cur_prof = cur_settings.get("profile", "balanced")
+        prof_idx = next((i for i, (k, _) in enumerate(profile_map) if k == cur_prof), 0)
+        prof_combo.current(prof_idx)
+        prof_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
+
+        # 2. Overscan / Pixel Mapping
+        tk.Label(form, text="Mappatura Pixel Schermo / Overscan TV:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        overscan_map = [
+            ("none", "1:1 Pixel-Perfect (Consigliata - Massima nitidezza caratteri)"),
+            ("light", "Overscan Leggero (~2.5% - Solo per TV che tagliano i bordi)"),
+            ("medium", "Overscan Medio (~5.0% - Solo per TV con zoom fisso)"),
+            ("heavy", "Overscan Massimo (~7.5% - Solo per TV con zoom elevato)"),
+        ]
+        over_var = tk.StringVar()
+        over_combo = ttk.Combobox(form, textvariable=over_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        over_combo["values"] = [label for _, label in overscan_map]
+        cur_over = cur_settings.get("overscan", "none")
+        if cur_over == "auto":
+            cur_over = "none"
+        over_idx = next((i for i, (k, _) in enumerate(overscan_map) if k == cur_over), 0)
+        over_combo.current(over_idx)
+        over_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
+
+        # 3. Color Depth
+        tk.Label(form, text="Profondità Colore:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        bpp_map = [
+            (32, "32-bit TrueColor (Consigliato per antialiasing subpixel ClearType)"),
+            (24, "24-bit Standard"),
+            (16, "16-bit Risparmio Banda"),
+        ]
+        bpp_var = tk.StringVar()
+        bpp_combo = ttk.Combobox(form, textvariable=bpp_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        bpp_combo["values"] = [label for _, label in bpp_map]
+        cur_bpp = int(cur_settings.get("color_depth", 32))
+        bpp_idx = next((i for i, (k, _) in enumerate(bpp_map) if k == cur_bpp), 0)
+        bpp_combo.current(bpp_idx)
+        bpp_combo.pack(fill=tk.X, pady=(0, 12), ipady=4)
+
+        status_lbl = tk.Label(form, text="", font=self.font_link, fg=COLOR_SUCCESS, bg=COLOR_CARD)
+        status_lbl.pack(pady=(0, 6))
 
         ts_ip = self.system_status.get("tailscale", {}).get("ip")
         lan_ip = self.system_status.get("network", {}).get("primary_ip") or "127.0.0.1"
-
-        msg = (
-            "Per configurare risoluzioni schermo, overscan display,\n"
-            "parametri FreeRDP avanzati o eseguire l'aggiornamento OS Debian,\n"
-            "accedi al pannello web completo da un qualsiasi PC:\n\n"
-            f"• Da rete locale:     http://{lan_ip}:8080\n"
-        )
+        web_info = f"Pannello Web Admin completo:  http://{lan_ip}:8080"
         if ts_ip:
-            msg += f"• Da Tailscale VPN:   http://{ts_ip}:8080\n"
+            web_info += f"  |  http://{ts_ip}:8080"
+        tk.Label(dialog, text=web_info, font=self.font_status_sub, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD).pack(pady=(0, 10))
 
-        tk.Label(dialog, text=msg, font=self.font_dropdown, fg=COLOR_TEXT_MAIN, bg=COLOR_CARD, justify=tk.LEFT, padx=20).pack(fill=tk.BOTH, expand=True)
-        tk.Button(dialog, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(pady=(0, 16))
+        def save_and_apply():
+            sel_prof = profile_map[max(0, prof_combo.current())][0]
+            sel_over = overscan_map[max(0, over_combo.current())][0]
+            sel_bpp = bpp_map[max(0, bpp_combo.current())][0]
+            status_lbl.config(text="Applicazione impostazioni in corso...", fg=COLOR_TITLE_CYAN)
+
+            def worker():
+                res = self._api_post("/api/settings/save", {
+                    "profile": sel_prof,
+                    "overscan": sel_over,
+                    "color_depth": sel_bpp
+                })
+                self._api_post("/api/system/overscan/apply", {"mode": sel_over})
+                self.root.after(0, lambda: on_saved(res))
+
+            def on_saved(res):
+                if res.get("success"):
+                    status_lbl.config(text="✓ Impostazioni applicate con successo!", fg=COLOR_SUCCESS)
+                    self.root.after(900, dialog.destroy)
+                else:
+                    status_lbl.config(text=f"Errore: {res.get('message')}", fg=COLOR_BTN_CANCEL)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=24, pady=8)
+        btn_box.pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
+        tk.Button(btn_box, text="Salva e Applica", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_and_apply).pack(side=tk.RIGHT)
 
     def open_credentials_dialog(self, host_key, host_info):
         """Modal credentials prompt when password is missing or requested."""

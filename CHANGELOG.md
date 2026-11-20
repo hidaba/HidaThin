@@ -5,6 +5,16 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.25] - 2026-11-20
+
+### Risolto & Perfezionato
+- **Eliminazione Definitiva Caratteri Sgranati: Disattivazione `AVC420` 4:2:0 Forzato da `/network:auto` e Ripristino Mappatura 1:1 Nativa `1920x1080` (`app/rdp.py`, `app/system.py`, `scripts/xinitrc`, `app/launcher.py`, `config/settings.yaml`, `install.sh`)**:
+  - **Fix FreeRDP 3.15 (`xfreerdp3`) `/network:auto`**: In FreeRDP 3.x il flag `/network:auto` abilita forzosamente `FreeRDP_SupportGraphicsPipeline = 1`, `FreeRDP_RemoteFxCodec = 1` e `FreeRDP_GfxH264 = 1` (compressione video lossy H.264 `AVC420` con sottocampionamento cromatico YUV 4:2:0), distruggendo i subpixel RGB di ClearType. Sostituito nel profilo `balanced` con `/network:lan` + `/compression-level:2` + `/cache:bitmap:on,offscreen:on,glyph:on` + `/scale:100`, garantendo pipeline GDI/Planar **100% lossless a 32-bit** (`GfxH264=0`, `RemoteFxCodec=0`, `AllowFontSmoothing=1`).
+  - **Fix Profilo `quality` (Vero 4:4:4 senza fallback `AVC420`)**: Sostituito `/gfx:AVC444,AVC420` (che permetteva a Windows di negoziare `AVC420` 4:2:0) con `/gfx:AVC444:on,AVC420:off,RFX:off,progressive:off` e rimosso il bottleneck `/frame-ack:1`.
+  - **Fix Profilo `performance` (Preservazione ClearType)**: Sostituito `/network:broadband` (che in FreeRDP 3.x sovrascriveva `AllowFontSmoothing=0` disabilitando ClearType anche in presenza di `+fonts`) con `/network:wan`.
+  - **Fix Scaling X11 e Doppio Overscan (`1971x1109` / `2022x1138` -> `1920x1080` 1:1)**: La modalità `overscan: auto` applicava automaticamente una matrice di trasformazione frazionaria `xrandr --transform 1.052632...` insieme ai margini DRM hardware su qualsiasi monitor/TV Samsung/LG, portando il framebuffer X11 a `1971x1109` (`2022x1138`) e causando ricampionamento nearest-neighbor (1 pixel perso ogni 19) su tutti i font. Impostato `overscan: "none"` (1:1 Pixel-Perfect `1920x1080` con `Broadcast RGB: Full`) come default e azzerati i margini DRM duplicati.
+  - **Configurazione Xft Subpixel LCD e Pannello Qualità Video nel Launcher (`scripts/xinitrc`, `app/launcher.py`)**: Aggiunto merge `xrdb` per `Xft.dpi: 96`, `Xft.antialias: 1`, `Xft.rgba: rgb`, `Xft.lcdfilter: lcddefault` all'avvio X11 e integrato nel pulsante `⚙ Impostazioni` del Launcher Nativo il selettore diretto di Profilo Grafico RDP, Mappatura Pixel 1:1 / Overscan e Profondità Colore 32-bit.
+
 ## [0.2.24] - 2026-10-27
 
 ### Risolto & Perfezionato

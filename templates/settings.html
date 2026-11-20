@@ -49,14 +49,14 @@
                 <div class="form-group">
                     <label for="setting-overscan"><strong>Compensazione Bordi / Overscan TV:</strong></label>
                     <select id="setting-overscan" class="input-text" onchange="previewOverscan(this.value)">
-                        <option value="none" {% if settings.overscan == 'none' %}selected{% endif %}>Disattivata (1:1 standard per monitor PC)</option>
-                        <option value="auto" {% if not settings.overscan or settings.overscan == 'auto' %}selected{% endif %}>Automatica (Rilevamento EDID HDMI)</option>
-                        <option value="light" {% if settings.overscan == 'light' %}selected{% endif %}>Leggera (~2.5% margini - TV con zoom lieve)</option>
-                        <option value="medium" {% if settings.overscan == 'medium' %}selected{% endif %}>Marcata (~5% margini - TV standard)</option>
-                        <option value="heavy" {% if settings.overscan == 'heavy' %}selected{% endif %}>Massima (~7.5% margini - TV con zoom elevato)</option>
+                        <option value="none" {% if not settings.overscan or settings.overscan == 'none' %}selected{% endif %}>Disattivata - 1:1 Pixel-Perfect (Consigliata per massima nitidezza caratteri)</option>
+                        <option value="auto" {% if settings.overscan == 'auto' %}selected{% endif %}>Automatica (1:1 Full RGB HDMI)</option>
+                        <option value="light" {% if settings.overscan == 'light' %}selected{% endif %}>Leggera (~2.5% margini - Solo per TV con zoom fisso)</option>
+                        <option value="medium" {% if settings.overscan == 'medium' %}selected{% endif %}>Marcata (~5% margini - Solo per TV con zoom fisso)</option>
+                        <option value="heavy" {% if settings.overscan == 'heavy' %}selected{% endif %}>Massima (~7.5% margini - Solo per TV con zoom elevato)</option>
                     </select>
                     <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
-                        Evita che i bordi escano dallo schermo quando il thin client è collegato a TV o schermi HDMI.
+                        Per testi nitidi come su Windows RDP usa <strong>Disattivata (1:1 Pixel-Perfect)</strong> (e imposta il formato immagine della TV su "Adatta a schermo" / "16:9").
                     </small>
                 </div>
                 <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
