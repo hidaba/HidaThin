@@ -1,70 +1,70 @@
-# TODO — Roadmap & Idee di Ottimizzazione HidaThin
+# TODO — HidaThin Optimization Roadmap & Ideas
 
-Questo documento raccoglie le attività pianificate e le ottimizzazioni architetturali ispirate dall'analisi di soluzioni thin client ad altissime prestazioni come **WTware** (boot time < 5s, approccio appliance stateless, footprint minimale).
-
----
-
-## ⚡ 1. Ottimizzazione Boot Speed
-
-- [x] **Modalità "Direct-to-RDP" / Auto-Connect (Bypass Browser)**
-  - *Implementato*: Introdotta modalità configurabile `startup.mode: direct_rdp` in `settings.yaml` gestita dal coordinatore dedicato [`scripts/direct_rdp_coordinator.py`](file:///y:/Progetti/thinclient/scripts/direct_rdp_coordinator.py) e [`scripts/xinitrc`](file:///y:/Progetti/thinclient/scripts/xinitrc). All'avvio il coordinatore attende la disponibilità di rete e Tailscale ed effettua la connessione FreeRDP verso l'host predefinito lasciando inizialmente spento Chromium. In caso di errore, timeout o disconnessione, effettua un fallback pulito alla Dashboard Kiosk senza loop infiniti.
-  - *Test*: Coperto da suite automatizzata (T24). Misurazione cronometrica specifica su dispositivo hardware fisico programmata con i comandi di benchmark.
-
-- [x] **Sostituzione o Alleggerimento di Chromium Kiosk UI (Launcher Nativo Tkinter WTware-Style)**
-  - *Implementato*: Introdotto il Launcher Nativo Python/Tkinter ultra-leggero [`app/launcher.py`](file:///y:/Progetti/thinclient/app/launcher.py) configurato come default (`ui.mode: native` in `settings.yaml`) avviato direttamente da [`scripts/xinitrc`](file:///y:/Progetti/thinclient/scripts/xinitrc).
-  - *Architettura*: Footprint di soli ~25 MB RAM (< 10% di Chromium) e avvio istantaneo (< 250 ms). Gestisce griglia host con stato di raggiungibilità in tempo reale, pill di stato Wi-Fi/Tailscale, modale credenziali/password, configurazione Wi-Fi on-demand e banner di conto alla rovescia per Direct-RDP con pulsante "Annulla" immediato.
-  - *Coordinamento RDP*: Durante la sessione FreeRDP il launcher si minimizza (`root.withdraw()`) rilasciando completamente il display e azzerando l'uso CPU; alla chiusura della sessione riappare istantaneamente (`root.deiconify()`) senza ricaricamenti.
-  - *Gestione Remota*: Il server backend Flask continua a girare in background su porta 8080 per amministrazione remota su LAN/Tailscale. Chromium è mantenuto come motore opzionale/legacy (`ui.mode: chromium`).
-  - *Guadagno effettivo*: **-5 / 7 secondi** all'avvio, **~275 MB di RAM liberata** per FreeRDP, Xorg e decodifica stream video.
-
-- [x] **Pruning Aggressivo dei Servizi Systemd**
-  - *Completato*: Creato script [`scripts/optimize-boot.sh`](file:///y:/Progetti/thinclient/scripts/optimize-boot.sh) con supporto `--undo`.
-  - *Servizi mascherati*: `apt-daily` & `apt-daily-upgrade` (timers/services), `man-db` (timer/service), `cups` & `cups-browsed`, `avahi-daemon`, `ModemManager`, `triggerhappy`, `plymouth`, `bluetooth` & `hciuart`, `systemd-udev-settle`, `systemd-time-wait-sync`, `e2scrub`.
-  - *Guadagno*: **-2 / 3 secondi** e azzeramento del blocco I/O su MicroSD al boot.
-
-- [x] **Ottimizzazione Kernel & Storage I/O (Silent Boot & Fast Boot)**
-  - *Implementato*: Aggiunti parametri di silent boot in /boot/firmware/cmdline.txt (quiet loglevel=3 logo.nologo consoleblank=0 vt.global_cursor_default=0) e disable_splash=1 in config.txt per eliminare del tutto le scritte console, warning e cursore lampeggiante all'avvio prima di X11. Reindirizzati stdout/stderr di 	hinclient-ui.service su journal systemd per sopprimere warning e cursore di Xorg.
-  - *Attività residue*:
-    - Aggiungere parametri di boot veloci in `/boot/firmware/cmdline.txt`: `quiet loglevel=0 fastboot noswap fsck.mode=skip`.
-    - Testare l'overclock del bus MicroSD in `/boot/firmware/config.txt`: `dtparam=sd_overclock=100` (per schede SD A1/A2).
-    - Valutare opzioni di mount `noatime,nodiratime,commit=60` per la partizione root.
+This document tracks planned activities and architectural optimizations inspired by the analysis of high-performance thin client solutions like **WTware** (boot time < 5s, stateless appliance model, minimal footprint).
 
 ---
 
-## 🛡️ 2. Resilienza & Appliance Mode (Stateless)
+## ⚡ 1. Boot Speed Optimization
 
-- [x] **Installer One-Liner Automatizzato (`install.sh` / `scripts/install.sh`)**
-  - *Obiettivo*: Setup completo della macchina da zero su Raspberry Pi OS Lite con un singolo comando `curl -sSL ... | sudo bash`.
-  - *Implementato*: Script unificato che gestisce dipendenze APT, browser Chromium Kiosk, FreeRDP 3, VNC, Tailscale Mesh VPN, ottimizzazioni kernel/hardware (polling mouse 500Hz, memoria GPU 128MB, accelerazione Xorg 1:1 flat, tuning swappiness a 10), script di fast-boot e registrazione/avvio dei servizi systemd. Regola di manutenzione registrata per la sincronizzazione continua dell'installer.
+- [x] **"Direct-to-RDP" / Auto-Connect Mode (Browser Bypass)**
+  - *Implemented*: Added configurable `startup.mode: direct_rdp` mode in `settings.yaml` managed by dedicated coordinator [`scripts/direct_rdp_coordinator.py`](file:///y:/Progetti/thinclient/scripts/direct_rdp_coordinator.py) and [`scripts/xinitrc`](file:///y:/Progetti/thinclient/scripts/xinitrc). At boot, coordinator awaits network and Tailscale readiness, then launches FreeRDP full-screen to default host without launching Chromium. On session disconnect, timeout, or error, falls back cleanly to Kiosk Dashboard without infinite loops.
+  - *Testing*: Covered by automated test suite (T24). Hardware chronometer benchmark scheduled on physical device.
 
-- [x] **Filesystem Read-Only con Partizione Persistente /data (Soluzione B)**
-  - *Obiettivo*: Rendere il thin client completamente immune alla corruzione della scheda SD da spegnimento improvviso, garantendo la persistenza delle impostazioni utente, password Wi-Fi e stato Tailscale.
-  - *Implementato*:
-    - Script automatico [`scripts/setup-readonly-fs.sh`](file:///y:/Progetti/thinclient/scripts/setup-readonly-fs.sh) (supporto partizione `/data`, tmpfs in RAM per `/tmp`, `/var/tmp`, `/var/log`, journaling volatile, e `--undo`).
-    - Bind-mount persistenti per `/opt/thinclient/config`, `/var/lib/tailscale` e `/etc/NetworkManager/system-connections`.
-    - Fallback automatico in Python per salvataggio su filesystem protetto (`save_settings` e `save_hosts_data`).
-    - Gestione aggiornamenti OS Debian: pulsante "⚡ Aggiorna Sistema Operativo (Debian)" nella pagina Impostazioni che rimonta automaticamente in RW, esegue `apt update` e `apt dist-upgrade` con streaming console in tempo reale, esegue il sync e ripristina garantito lo stato Read-Only (`ro`).
-    - Monitoraggio stato del Filesystem (RO/RW) visibile anche in Diagnostica e Impostazioni.
+- [x] **Replacement / Lightweight Alternative to Chromium Kiosk UI (Native Tkinter Launcher WTware-Style)**
+  - *Implemented*: Introduced ultra-lightweight Python/Tkinter Native Launcher [`app/launcher.py`](file:///y:/Progetti/thinclient/app/launcher.py) set as default (`ui.mode: native` in `settings.yaml`) launched directly from [`scripts/xinitrc`](file:///y:/Progetti/thinclient/scripts/xinitrc).
+  - *Architecture*: Minimal footprint of ~25 MB RAM (< 10% of Chromium) and instant start (< 250 ms). Manages remote host grid with real-time reachability, Wi-Fi/Tailscale status pills, interactive credentials modal, on-demand Wi-Fi network configuration, and countdown timer for Direct-RDP with instant "Cancel" button.
+  - *RDP Coordination*: During FreeRDP sessions, the launcher hides (`root.withdraw()`), releasing display resources and dropping CPU usage to zero; upon session termination, it immediately restores (`root.deiconify()`) with zero reload latency.
+  - *Remote Management*: Flask backend server continues running in background on port 8080 for remote administration over LAN/Tailscale. Chromium remains available as legacy/optional engine (`ui.mode: chromium`).
+  - *Net Gain*: **-5 to 7 seconds** at startup, **~275 MB RAM freed** for FreeRDP, Xorg, and hardware video decode.
 
-- [ ] **Watchdog Hardware del Raspberry Pi**
-  - *Task*: Abilitare il chip watchdog hardware (`bcm2835_wdt`) con `systemd` per riavviare automaticamente il thin client in caso di freeze del sistema.
+- [x] **Aggressive Systemd Services Pruning**
+  - *Completed*: Created [`scripts/optimize-boot.sh`](file:///y:/Progetti/thinclient/scripts/optimize-boot.sh) with `--undo` support.
+  - *Pruned / Masked Services*: `apt-daily` & `apt-daily-upgrade` (timers/services), `man-db` (timer/service), `cups` & `cups-browsed`, `avahi-daemon`, `ModemManager`, `triggerhappy`, `plymouth`, `bluetooth` & `hciuart`, `systemd-udev-settle`, `systemd-time-wait-sync`, `e2scrub`.
+  - *Gain*: **-2 to 3 seconds** and zero MicroSD I/O blocking at boot.
 
----
-
-## 🌐 3. Gestione Centralizzata & Provisioning Remoto
-
-- [ ] **Configurazione Centralizzata Remota**
-  - *Obiettivo*: Gestire flotte di thin client da un server centrale senza dover configurare ogni singolo dispositivo.
-  - *Task*:
-    - Implementare nel backend il recupero opzionale di `hosts.yaml` da un endpoint HTTP remoto o repository git (via Tailscale) basato su MAC address o hostname.
-    - Se l'endpoint remoto non risponde, utilizzare la configurazione locale di cache.
+- [x] **Kernel & Storage I/O Optimization (Silent Boot & Fast Boot)**
+  - *Implemented*: Added silent boot parameters in `/boot/firmware/cmdline.txt` (`quiet loglevel=3 logo.nologo consoleblank=0 vt.global_cursor_default=0`) and `disable_splash=1` in `config.txt` to suppress console banners, warnings, and blinking cursor prior to X11. Redirected `thinclient-ui.service` stdout/stderr to systemd journal.
+  - *Remaining Activities*:
+    - Add fast boot flags in `/boot/firmware/cmdline.txt`: `quiet loglevel=0 fastboot noswap fsck.mode=skip`.
+    - Test MicroSD bus overclocking in `/boot/firmware/config.txt`: `dtparam=sd_overclock=100` (for A1/A2 SD cards).
+    - Evaluate root mount flags `noatime,nodiratime,commit=60`.
 
 ---
 
-## 🖥️ 4. Stack Grafico Moderno (Transizione a Wayland/Cage)
+## 🛡️ 2. Resilience & Appliance Mode (Stateless)
 
-- [ ] **Valutare Wayland + Cage (Kiosk Compositor)**
-  - *Obiettivo*: Eliminare l'overhead di Xorg + Openbox adottando **Cage**, un micro-compositor Wayland orientato ai kiosk che parla direttamente con KMS/DRM.
-  - *Task*:
-    - Testare `wlfreerdp` o `xfreerdp` tramite Xwayland / Cage.
-    - Verificare la compatibilità dell'overlay OSD e dello shadowing VNC (o migrazione a Wayvnc).
+- [x] **Automated One-Liner Installer (`install.sh` / `scripts/install.sh`)**
+  - *Goal*: Full turnkey machine setup from scratch on Raspberry Pi OS Lite via single command `curl -sSL ... | sudo bash`.
+  - *Implemented*: Unified script handling APT dependencies, Chromium Kiosk, FreeRDP 3, VNC, Tailscale Mesh VPN, hardware/kernel optimizations (500 Hz mouse polling, 128 MB GPU allocation, 1:1 flat Xorg acceleration, swappiness 10), fast-boot scripts, and systemd service registration. Repository maintenance rule registered for continuous installer sync.
+
+- [x] **Read-Only Root Filesystem with Persistent /data Partition (Solution B)**
+  - *Goal*: Complete immunity against MicroSD corruption from abrupt power cutoffs, while preserving user settings, Wi-Fi credentials, and Tailscale state.
+  - *Implemented*:
+    - Automated setup script [`scripts/setup-readonly-fs.sh`](file:///y:/Progetti/thinclient/scripts/setup-readonly-fs.sh) (persistent `/data` partition, RAM tmpfs for `/tmp`, `/var/tmp`, `/var/log`, volatile journaling, and `--undo`).
+    - Persistent bind mounts for `/opt/thinclient/config`, `/var/lib/tailscale`, and `/etc/NetworkManager/system-connections`.
+    - Python automated fallback for saving onto protected filesystems (`save_settings` and `save_hosts_data`).
+    - Debian OS Update Manager: "⚡ Update Operating System (Debian)" button in Settings page that remounts RW, runs `apt update` & `apt dist-upgrade` with real-time console streaming, executes sync, and reliably restores Read-Only (`ro`) mode.
+    - Filesystem status (RO/RW) live monitoring in Diagnostics and Settings.
+
+- [ ] **Raspberry Pi Hardware Watchdog**
+  - *Task*: Enable hardware watchdog chip (`bcm2835_wdt`) via `systemd` to automatically reboot the thin client on system freezes.
+
+---
+
+## 🌐 3. Centralized Management & Remote Provisioning
+
+- [ ] **Remote Centralized Configuration**
+  - *Goal*: Manage thin client fleets from a central server without manually provisioning individual devices.
+  - *Tasks*:
+    - Implement optional backend retrieval of `hosts.yaml` from a remote HTTP endpoint or Git repository (over Tailscale) identified by MAC address or hostname.
+    - If remote endpoint is unreachable, fallback to local cached configuration.
+
+---
+
+## 🖥️ 4. Modern Graphics Stack (Wayland/Cage Transition)
+
+- [ ] **Evaluate Wayland + Cage (Kiosk Compositor)**
+  - *Goal*: Eliminate Xorg + Openbox overhead by adopting **Cage**, a kiosk-oriented Wayland micro-compositor communicating directly with KMS/DRM.
+  - *Tasks*:
+    - Test `wlfreerdp` or `xfreerdp` under Xwayland / Cage.
+    - Verify compatibility with OSD hot-corner overlay and VNC shadowing (or migrate to Wayvnc).

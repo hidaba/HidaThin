@@ -1,172 +1,172 @@
-# HidaThin — Report di Consegna: Ottimizzazione Boot, Resilienza e Correzione Bug
+# HidaThin — Delivery Report: Boot Optimization, Resilience, and Bug Fixing
 
-Data: 25 ottobre 2026  
-Versione: `0.2.17`  
-Branch di lavoro: `feature/boot-opt-and-bugfix`  
-Commit di partenza: `3f08a27` (Audit base v0.2.16) / `4523da2` (Ultimo commit locale pre-intervento)  
+Date: October 25, 2026  
+Version: `0.2.17`  
+Working Branch: `feature/boot-opt-and-bugfix`  
+Base Commits: `3f08a27` (Audit base v0.2.16) / `4523da2` (Latest local pre-intervention commit)  
 
 ---
 
-## 1. Tabella dei Task e Stato di Implementazione
+## 1. Task Summary and Implementation Status
 
-| ID Task | Descrizione Sintetica | Stato | Note di Verifica |
+| Task ID | Summary Description | Status | Verification Notes |
 |---|---|---|---|
-| **SEC-01** | Default bind `127.0.0.1`, isolamento credenziali RDP, auth remota e semantica password | **Implementato** | Verificato con test unitari e di integrazione (T01, T02, T03). Password rimosse da DOM, HTML e JSON. |
-| **SEC-02** | VNC vincolato strettamente a Tailscale (nessun listener LAN/0.0.0.0 o senza password) | **Implementato** | Verificato con T04 e T05. Rifiuto fallback LAN/0.0.0.0, rimozione password default `thinclient`. |
-| **FS-01** | Log runtime volatili compatibili con root Read-Only | **Implementato** | Verificato con T06. Reindirizzamento a `/run/thinclient` (RuntimeDirectory systemd) e fallback `/dev/null`. |
-| **FS-02** | Persistenza `/data`, rilevamento UUID, nessuna formattazione implicita e rollback coerente | **Implementato** | Verificato con T09 e T10. Blocco se device non valido o mount fallito, preservazione dati recenti su `--undo`. |
-| **INS-01** | Installer pulito, rimosso orphan `EOF`, staging dir per clone, preservazione configurazioni | **Implementato** | Verificato con T07 e T08. Verifica sintassi `bash -n`, supporto `chromium` e `chromium-browser`. |
-| **BOOT-01** | Splash cyberpunk rapido, azzeramento delay artificiali, controlli immediati e cancellabilità | **Implementato** | Verificato con T11, T12 e T13. Transizione splash <= 200ms a servizi pronti, pulsanti fallback sempre attivi. |
-| **BOOT-02** | Endpoint `/healthz`, stato di sistema in background con cache thread-safe e bounded workers | **Implementato** | Verificato con T14 e T15. Nessun blocco su chiamate subprocess lente, timeout TCP/DNS rigoroso. |
-| **RDP-01** | Ciclo di vita sessioni isolato (`RDPSession`), monitoraggio deterministico, segnali Chromium mirati | **Implementato** | Verificato con T16 e T17. Vecchie sessioni non azzerano nuove istanze, `start_new_session=True`. |
-| **NET-01** | Invalidazione cache Tailscale al riavvio, timeout rigorosi e fallback a IP diretto | **Implementato** | Verificato con T18. Stato fresco letto subito dopo il restart di `tailscaled`. |
-| **WIFI-01** | Parser `nmcli` per `\:`, `\\`, quote e Unicode; pulsanti DOM sicuri; connessione non distruttiva | **Implementato** | Verificato con T19 e T20. Profili funzionanti precedenti non cancellati preventivamente. |
-| **UPD-01** | Worker OS update con lock atomico preventivo, sincronizzazione e ripristino fedele mount iniziale | **Implementato** | Verificato con T21, T22 e T23. Distinzione `completed_ro_failed` e rispetto dello stato di partenza (RW/RO). |
-| **BOOT-03** | Modalità direct-to-RDP configurabile con coordinatore dedicato e fallback alla dashboard | **Implementato** | Verificato con T24 (`direct_rdp_coordinator.py`). Nessun loop infinito tra browser e FreeRDP. |
-| **TEST-01** | Suite automatizzata di 25 test di regressione (T01 - T25) | **Implementato** | Tutti i 25 test passati con successo (`python -m pytest tests/ -v`). |
-| **DOC-01** | Documentazione allineata (`README.md`, `TODO.md`, `CHANGELOG.md`, settings) | **Implementato** | Documentate tutte le nuove opzioni, architettura di sicurezza e comandi di verifica. |
+| **SEC-01** | Default bind `127.0.0.1`, RDP credential isolation, remote auth, and password semantics | **Implemented** | Verified via unit and integration tests (T01, T02, T03). Passwords removed from DOM, HTML, and JSON. |
+| **SEC-02** | VNC strictly bound to Tailscale (no LAN/0.0.0.0 listener or empty password) | **Implemented** | Verified via T04 and T05. Rejection of LAN/0.0.0.0 fallback, removal of default `thinclient` password. |
+| **FS-01** | Volatile runtime logs compatible with Read-Only root filesystem | **Implemented** | Verified via T06. Redirection to `/run/thinclient` (systemd RuntimeDirectory) with `/dev/null` fallback. |
+| **FS-02** | `/data` persistence, dynamic UUID detection, no implicit formatting, and coherent rollback | **Implemented** | Verified via T09 and T10. Abort on invalid block device or mount failure; recent data preserved on `--undo`. |
+| **INS-01** | Clean installer, removed orphan `EOF`, staging dir for git clone, config preservation | **Implemented** | Verified via T07 and T08. Validated with `bash -n`, supports both `chromium` and `chromium-browser`. |
+| **BOOT-01** | Instant cyberpunk splash, zero artificial delays, immediate checks and cancellability | **Implemented** | Verified via T11, T12, and T13. Splash transition <= 200ms when ready, recovery buttons always interactive. |
+| **BOOT-02** | `/healthz` endpoint, background system collector with thread-safe cache & bounded workers | **Implemented** | Verified via T14 and T15. No stalls on slow subprocesses; strict TCP/DNS timeouts. |
+| **RDP-01** | Isolated session lifecycle (`RDPSession`), deterministic supervision, targeted Chromium signals | **Implemented** | Verified via T16 and T17. Stale sessions do not clobber new instances; `start_new_session=True`. |
+| **NET-01** | Tailscale cache invalidation on restart, strict timeouts, and direct IP fallback | **Implemented** | Verified via T18. Fresh status retrieved immediately following `tailscaled` service restart. |
+| **WIFI-01** | `nmcli` parser for `\:`, `\\`, quotes and Unicode; safe DOM buttons; non-destructive connect | **Implemented** | Verified via T19 and T20. Working prior Wi-Fi profiles are not deleted on connection failure. |
+| **UPD-01** | OS updater worker with preventive atomic lock, sync, and faithful mount state restoration | **Implemented** | Verified via T21, T22, and T23. Distinction for `completed_ro_failed` and respect of initial state (RW/RO). |
+| **BOOT-03** | Configurable direct-to-RDP mode with dedicated coordinator and dashboard fallback | **Implemented** | Verified via T24 (`direct_rdp_coordinator.py`). No infinite bounce loops between browser and FreeRDP. |
+| **TEST-01** | Automated regression test suite of 25 tests (T01 - T25) | **Implemented** | All 25 tests pass (`python -m pytest tests/ -v`). |
+| **DOC-01** | Aligned documentation (`README.md`, `TODO.md`, `CHANGELOG.md`, settings) | **Implemented** | Documented all new settings, security architecture, and validation procedures. |
 
 ---
 
-## 2. File Modificati e Razionale
+## 2. Modified Files and Rationale
 
 1. **`app/main.py`**:
-   - Bind HTTP default impostato su `127.0.0.1:8080`.
-   - Middleware di controllo accessi per rigettare chiamate mutanti remote non autenticate e proteggere da DNS rebinding.
-   - Esclusione delle credenziali da `load_hosts_data(include_passwords=False)` per tutte le pagine HTML e le risposte JSON delle API.
-   - Endpoint `/healthz` ad altissima velocità e background system status collector thread-safe con rate limiting e bounded workers.
-   - Semantica password: uso password salvata, supporto a password transitoria per singola sessione (`save_password=False`), cancellazione esplicita (`clear_password`).
+   - HTTP default bind set to `127.0.0.1:8080`.
+   - Access control middleware rejecting unauthorized remote mutating calls and guarding against DNS rebinding.
+   - Exclusion of credentials via `load_hosts_data(include_passwords=False)` for all HTML templates and JSON API responses.
+   - High-speed `/healthz` endpoint and thread-safe background system status collector with rate limiting and bounded workers.
+   - Password semantics: use saved password, support transient single-session passwords (`save_password=False`), explicit credential clearing (`clear_password`).
 2. **`app/system.py`**:
-   - Schema di validazione per `settings.yaml` con deep merge controllato per preservare le sezioni non modificate.
-   - Funzione atomica `write_secure_yaml` con permessi `0600` e directory `0700`.
-   - Worker di aggiornamento OS (`_os_update_worker` / `start_os_update`): impostazione atomica di `status="running"` sotto lock prima della creazione del thread; rilevamento dello stato iniziale di mount (RO vs RW) e ripristino fedele dello stato di partenza; introduzione dello stato `completed_ro_failed` se il remount finale in RO fallisce.
+   - Validation schema for `settings.yaml` with controlled deep-merge to preserve untouched sections.
+   - Atomic `write_secure_yaml` function with `0600` file permissions and `0700` directories.
+   - OS update worker (`_os_update_worker` / `start_os_update`): atomic setting of `status="running"` under lock before thread creation; initial mount state detection (RO vs RW) with faithful restoration; `completed_ro_failed` status if final RO remount fails.
 3. **`app/rdp.py`**:
-   - Incapsulamento delle sessioni nella classe `RDPSession` con identificatore univoco `session_id`.
-   - Riferimento stabile passato al thread di monitoraggio, impedendo che il cleanup di una vecchia sessione interferisca con una nuova sessione attiva.
-   - Sostituzione di `preexec_fn=os.setsid` con `start_new_session=True`.
-   - Logging runtime rediretto su directory volatile (`/run/thinclient` o `/tmp/thinclient-logs`) con fallback a `/dev/null` in caso di file system Read-Only o spazio esaurito.
-   - Segnalazione mirata del browser kiosk (`chromium.*--kiosk`) senza colpire processi estranei.
+   - Encapsulation of sessions in `RDPSession` class with unique `session_id`.
+   - Stable reference passed to monitor thread, preventing cleanup of stale sessions from disrupting active ones.
+   - Replaced `preexec_fn=os.setsid` with `start_new_session=True`.
+   - Runtime logging redirected to volatile directory (`/run/thinclient` or `/tmp/thinclient-logs`) with `/dev/null` fallback for read-only filesystem or full disk.
+   - Targeted signaling to kiosk browser (`chromium.*--kiosk`) without affecting unrelated processes.
 4. **`app/tailscale.py`**:
-   - Invalidazione immediata della cache a tempo monotonico in caso di riavvio esplicito del daemon.
-   - Supporto a IP fallback in caso di fallimento della risoluzione MagicDNS.
+   - Immediate cache invalidation using monotonic time upon explicit daemon restart.
+   - Fallback to direct IP when MagicDNS hostname resolution fails.
 5. **`app/vnc.py`**:
-   - Salvataggio configurazioni VNC senza sovrascrivere altre sezioni di settings.
-   - Rimozione della password di default `thinclient` e blocco dell'attivazione VNC se non è configurata una password.
+   - Safe persistence of VNC settings without overwriting unrelated configuration sections.
+   - Removal of default `thinclient` password and strict block against listening when no password is set.
 6. **`app/wifi.py`**:
-   - Parser dedicato `parse_nmcli_terse_line` per gestire correttamente coloni escapati (`\:`), backslash (`\\`) e caratteri UTF-8.
-   - Connessione non distruttiva che preserva i profili preesistenti funzionanti in caso di credenziali errate.
+   - Dedicated `parse_nmcli_terse_line` parser handling escaped colons (`\:`), backslashes (`\\`), and UTF-8 characters.
+   - Non-destructive connection workflow preserving existing working profiles on authentication failure.
 7. **`scripts/x11vnc-start.sh`**:
-   - Blocco rigoroso dell'avvio su `0.0.0.0` o LAN se `bind_tailscale_only: true` e la VPN non è disponibile.
-   - Verifica della presenza del file password `0600` prima di avviare il listener.
-   - Rilevamento della porta configurata e del flag di abilitazione da `settings.yaml`.
+   - Strict block against listening on `0.0.0.0` or local LAN when `bind_tailscale_only: true` and VPN is not ready.
+   - Mandatory check for `0600` password file prior to launching listener.
+   - Dynamic port and activation status detection from `settings.yaml`.
 8. **`scripts/setup-readonly-fs.sh`**:
-   - Rilevamento automatico dell'UUID effettivo della partizione `/data`.
-   - Verifica di sicurezza per impedire l'uso accidentale di `/` o `/boot`.
-   - Eliminazione della formattazione implicita su dischi ext4 già partizionati.
-   - Blocco di sicurezza se il mount fallisce o la partizione non è scrivibile.
-   - Routine `--undo` che sincronizza le configurazioni recenti modificate su `/data` prima di ripristinare `/etc/fstab`.
+   - Dynamic UUID detection for `/data` partition without hardcoding labels.
+   - Safety checks preventing accidental selection of `/` or `/boot`.
+   - Elimination of implicit formatting on pre-existing ext4 partitions.
+   - Safety abort if `/data` mount fails or is not writable.
+   - Coherent `--undo` routine synchronizing recent configs on `/data` before restoring `/etc/fstab`.
 9. **`scripts/direct_rdp_coordinator.py`**:
-   - Nuovo script supervisore per l'avvio diretto a FreeRDP senza aprire Chromium.
-   - Gestione delle attese di rete con timeout configurabile (default 20s) e fallback trasparente alla Dashboard Kiosk.
+   - Supervisor script for direct FreeRDP boot bypassing Chromium.
+   - Network readiness waiting with configurable timeout (default 20s) and clean fallback to Kiosk Dashboard.
 10. **`scripts/xinitrc`**:
-    - Risoluzione dinamica dell'eseguibile Chromium (`chromium` o `chromium-browser`).
-    - Verifica HTTP 200 su `/healthz` con timeout bounded prima dell'avvio della UI.
-    - Integrazione della modalità `direct_rdp`.
+    - Dynamic browser binary resolution (`chromium` or `chromium-browser`).
+    - Bounded HTTP 200 check on `/healthz` prior to launching graphical UI.
+    - Integration of `direct_rdp` mode.
 11. **`scripts/optimize-boot.sh`**:
-    - Rimozione del mascheramento di `logrotate.timer` ed `e2scrub_all.timer`.
+    - Removed masking of `logrotate.timer` and `e2scrub_all.timer`.
 12. **`install.sh`**:
-    - Rimozione dell'`EOF` orfano al termine dello script.
-    - Utilizzo di directory di staging temporanea per `git clone` evitando errori di destinazione non vuota.
-    - Preservazione delle configurazioni utente esistenti e permessi restrittivi `0600`/`0700`.
+    - Removed orphan `EOF` at script termination.
+    - Used temporary staging directory for `git clone` preventing non-empty destination errors.
+    - Preserved existing user configurations and enforced `0600`/`0700` permissions.
 13. **`systemd/thinclient.service`**:
-    - Aggiunta direttiva `RuntimeDirectory=thinclient` e `RuntimeDirectoryMode=0755`.
+    - Added `RuntimeDirectory=thinclient` and `RuntimeDirectoryMode=0755`.
 14. **`templates/index.html`**:
-    - Rimozione delle password dagli attributi DOM.
-    - Riscrittura del controller dello splash per transizionare in <= 200ms in presenza di servizi pronti.
-    - Comandi di recupero ("Configura Wi-Fi", "Apri Dashboard") immediatamente visibili e utilizzabili.
+    - Removed passwords from DOM attributes.
+    - Rewrote splash controller for <= 200ms transitions once services are healthy.
+    - Recovery buttons ("Configure Wi-Fi", "Open Dashboard") always visible and interactive.
 15. **`templates/hosts.html`**:
-    - Rimozione della serializzazione password nell'HTML (`data-password` e `host|tojson` eliminati).
-    - Modalità di modifica con placeholder protetto e checkbox esplicita di cancellazione credenziale.
+    - Removed password serialization in HTML (`data-password` and `host|tojson` removed).
+    - Edit mode with protected placeholder and explicit credential deletion checkbox.
 16. **`templates/wifi.html`**:
-    - Creazione dinamica delle righe e dei pulsanti tramite API DOM (`addEventListener`), proteggendo da injection nei nomi SSID.
+    - Dynamic row and button generation via DOM APIs (`addEventListener`), preventing XSS in SSID names.
 17. **`tests/`**:
-    - Suite completa di 25 test automatizzati (`test_sec.py`, `test_fs_installer.py`, `test_boot_status.py`, `test_rdp_lifecycle.py`, `test_net_wifi.py`, `test_updater_settings.py`).
+    - Full regression test suite covering 25 test cases (`test_sec.py`, `test_fs_installer.py`, `test_boot_status.py`, `test_rdp_lifecycle.py`, `test_net_wifi.py`, `test_updater_settings.py`).
 
 ---
 
-## 3. Comandi di Test ed Esito
+## 3. Test Execution and Results
 
-Esecuzione della suite completa:
+Run full test suite:
 ```bash
 python -m pytest tests/ -v
 ```
-Esito: **25 passed in 9.05s** (100% success rate).
+Result: **25 passed in 9.05s** (100% success rate).
 
 ---
 
-## 4. Procedura di Aggiornamento di un Sistema Esistente
+## 4. Upgrade Procedure for Existing Systems
 
-1. Collegarsi in SSH al Raspberry Pi:
+1. Connect to the Raspberry Pi via SSH:
    ```bash
-   ssh root@<indirizzo-ip>
+   ssh root@<ip-address>
    ```
-2. Se il filesystem è in sola lettura, sbloccarlo temporaneamente:
+2. If filesystem is mounted read-only, temporarily remount as read-write:
    ```bash
-   rw   # alias per mount -o remount,rw / && mount -o remount,rw /boot/firmware
+   rw   # alias for mount -o remount,rw / && mount -o remount,rw /boot/firmware
    ```
-3. Scaricare ed eseguire la nuova versione senza sovrascrivere le configurazioni:
+3. Pull and apply the updated code without overwriting existing configuration:
    ```bash
    cd /opt/thinclient
-   git pull origin feature/boot-opt-and-bugfix  # oppure main post-merge
+   git pull origin main
    bash install.sh
    ```
-4. Se il file `config/settings.yaml` non include le nuove sezioni, esse vengono caricate automaticamente con i default sicuri (`bind: 127.0.0.1`, `remote_enabled: false`, `startup.mode: dashboard`). Per abilitare l'amministrazione remota via Tailscale:
+4. If `config/settings.yaml` does not contain the new sections, secure defaults are automatically applied (`bind: 127.0.0.1`, `remote_enabled: false`, `startup.mode: dashboard`). To enable remote web management over Tailscale:
    ```yaml
    web_admin:
      bind: "0.0.0.0"
      port: 8080
      remote_enabled: true
-     admin_token: "TuoTokenSegreto"
+     admin_token: "YourSecretToken"
    ```
-5. Riavviare il servizio:
+5. Restart services:
    ```bash
    systemctl restart thinclient thinclient-ui thinclient-vnc
    ```
-6. Se la macchina era in Read-Only, ripristinare la protezione:
+6. Restore read-only protection:
    ```bash
-   ro   # alias per sync && mount -o remount,ro / && mount -o remount,ro /boot/firmware
+   ro   # alias for sync && mount -o remount,ro / && mount -o remount,ro /boot/firmware
    ```
 
 ---
 
-## 5. Procedura di Rollback Conservativo
+## 5. Conservative Rollback Procedure
 
-Qualora si desideri annullare la modalità Read-Only o ripristinare una configurazione precedente preservando i dati modificati:
-1. Eseguire:
+To roll back Read-Only mode or restore previous configurations while preserving modified data:
+1. Run:
    ```bash
    sudo bash /opt/thinclient/scripts/setup-readonly-fs.sh --undo
    ```
-2. Lo script copia automaticamente tutti i file presenti in `/data/thinclient-config/`, `/data/tailscale/` e `/data/NetworkManager/system-connections/` nelle rispettive directory locali di `/opt/thinclient/config/`, `/var/lib/tailscale/` ed `/etc/NetworkManager/system-connections/`, garantendo che nessuna password o profilo aggiunto durante il funzionamento in RO vada perso.
-3. Riavviare con `sudo reboot`.
+2. The script automatically synchronizes all files from `/data/thinclient-config/`, `/data/tailscale/`, and `/data/NetworkManager/system-connections/` back into `/opt/thinclient/config/`, `/var/lib/tailscale/`, and `/etc/NetworkManager/system-connections/`, ensuring no passwords or network profiles are lost.
+3. Reboot via `sudo reboot`.
 
 ---
 
-## 6. Attivazione e Disattivazione Modalità Direct-to-RDP
+## 6. Enabling and Disabling Direct-to-RDP Mode
 
-### Per attivare Direct-to-RDP:
-1. Modificare `/opt/thinclient/config/settings.yaml` impostando:
+### To enable Direct-to-RDP:
+1. Edit `/opt/thinclient/config/settings.yaml`:
    ```yaml
    startup:
      mode: "direct_rdp"
      connect_timeout_seconds: 20
      fallback_to_dashboard: true
    ```
-2. Assicurarsi che in `/opt/thinclient/config/hosts.yaml` sia configurato un host predefinito valido (`default_host: ...`).
-3. Al riavvio (`sudo reboot`), il Raspberry Pi attenderà la connettività di rete/Tailscale e lancerà immediatamente FreeRDP a schermo intero senza caricare Chromium Kiosk.
+2. Ensure `/opt/thinclient/config/hosts.yaml` contains a valid default host (`default_host: ...`).
+3. Upon reboot (`sudo reboot`), the Raspberry Pi awaits network and Tailscale readiness, then launches FreeRDP full-screen immediately without loading Chromium Kiosk.
 
-### Per disattivare Direct-to-RDP e tornare alla Dashboard:
-- Qualora la sessione FreeRDP venga terminata, o la rete non sia pronta entro i 20s configurati, il sistema apre automaticamente la Dashboard Kiosk.
-- Dalla Dashboard Kiosk (o via SSH), ripristinare in `settings.yaml`:
+### To disable Direct-to-RDP and return to Dashboard:
+- If the FreeRDP session ends, or network fails to initialize within 20s, the system automatically opens the Kiosk Dashboard.
+- From the Kiosk Dashboard (or via SSH), restore in `settings.yaml`:
   ```yaml
   startup:
     mode: "dashboard"
@@ -174,10 +174,10 @@ Qualora si desideri annullare la modalità Read-Only o ripristinare una configur
 
 ---
 
-## 7. Misure Hardware Rimanenti
+## 7. Remaining Hardware Measurements
 
-Poiché l'ambiente di sviluppo attuale è basato su simulazione e test isolati, le seguenti misurazioni cronometriche hardware dovranno essere eseguite sul Raspberry Pi 3 fisico di test:
-1. `systemd-analyze time` e `systemd-analyze critical-chain thinclient-ui.service`.
-2. Tempo power-on → primo frame visibile dello splash.
-3. Tempo power-on → sessione FreeRDP attiva (confronto tra modalità `dashboard` e modalità `direct_rdp`).
-4. Verifica termica e throttled sotto carico prolungato: `vcgencmd get_throttled`.
+Because development and unit tests run in simulated environments, the following hardware chronometer measurements should be performed on the physical test Raspberry Pi 3:
+1. `systemd-analyze time` and `systemd-analyze critical-chain thinclient-ui.service`.
+2. Power-on time to first visible splash screen frame.
+3. Power-on time to active FreeRDP session (comparing `dashboard` vs `direct_rdp` mode).
+4. Thermal and throttling verification under prolonged full-screen load: `vcgencmd get_throttled`.

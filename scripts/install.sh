@@ -8,6 +8,6 @@ if [ -f "$ROOT_INSTALL" ]; then
 elif [ -f "/opt/thinclient/install.sh" ]; then
     exec bash "/opt/thinclient/install.sh" "$@"
 else
-    echo "Errore: install.sh non trovato." >&2
+    echo "Error: install.sh not found." >&2
     exit 1
 fi

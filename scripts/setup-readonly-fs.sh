@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# HidaThin - Read-Only Root Filesystem & Persistent Data Setup (Soluzione B)
+# HidaThin - Read-Only Root Filesystem & Persistent Data Setup (Solution B)
 # ==============================================================================
 # Locks Debian root (/) and /boot into Read-Only (RO) to completely prevent
 # MicroSD corruption from power cuts, while mounting /data in Read-Write (RW)
@@ -14,7 +14,7 @@
 set -e
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Errore: Questo script deve essere eseguito come root (usa sudo)." >&2
+    echo "Error: This script must be run as root (use sudo)." >&2
     exit 1
 fi
 
@@ -29,7 +29,7 @@ THINCLIENT_DIR="/opt/thinclient"
 # ------------------------------------------------------------------------------
 if [ "$1" == "--undo" ]; then
     echo "=========================================================="
-    echo " RIPRISTINO FILESYSTEM IN READ-WRITE (RW)"
+    echo " RESTORING FILESYSTEM TO READ-WRITE (RW)"
     echo "=========================================================="
 
     # Remount rw first
@@ -38,7 +38,7 @@ if [ "$1" == "--undo" ]; then
 
     # Preserve any newer configurations modified on /data before rolling back fstab
     if [ -d "/data/thinclient-config" ] && [ -d "$THINCLIENT_DIR/config" ]; then
-        echo "[UNDO] Preservazione configurazioni recenti da /data a $THINCLIENT_DIR/config..."
+        echo "[UNDO] Preserving recent configurations from /data to $THINCLIENT_DIR/config..."
         cp -a /data/thinclient-config/* "$THINCLIENT_DIR/config/" 2>/dev/null || true
     fi
     if [ -d "/data/tailscale" ] && [ -d "/var/lib/tailscale" ]; then
@@ -50,30 +50,30 @@ if [ "$1" == "--undo" ]; then
 
     if [ -f "$FSTAB_BAK" ]; then
         cp "$FSTAB_BAK" "$FSTAB"
-        echo "[OK] /etc/fstab ripristinato dal backup ($FSTAB_BAK)."
+        echo "[OK] /etc/fstab restored from backup ($FSTAB_BAK)."
     else
         sed -i 's/defaults,noatime,ro/defaults,noatime/g' "$FSTAB"
         sed -i 's/defaults,ro/defaults/g' "$FSTAB"
-        echo "[OK] Opzioni 'ro' rimosse da /etc/fstab."
+        echo "[OK] 'ro' options removed from /etc/fstab."
     fi
 
     rm -f /etc/profile.d/readonly-helpers.sh
-    echo "[OK] Helper e alias rimossi."
+    echo "[OK] Helpers and aliases removed."
     echo ""
-    echo "Ripristino completato! Riavvia il Raspberry Pi con: sudo reboot"
+    echo "Restoration complete! Reboot the Raspberry Pi with: sudo reboot"
     exit 0
 fi
 
 echo "=========================================================="
-echo " CONFIGURAZIONE FILESYSTEM READ-ONLY + /data PERSISTENTE"
+echo " CONFIGURING READ-ONLY FILESYSTEM + PERSISTENT /data"
 echo "=========================================================="
 
 # 1. Backup /etc/fstab
 if [ ! -f "$FSTAB_BAK" ]; then
     cp "$FSTAB" "$FSTAB_BAK"
-    echo "[1/8] Creato backup di sicurezza di /etc/fstab in $FSTAB_BAK"
+    echo "[1/8] Created safety backup of /etc/fstab in $FSTAB_BAK"
 else
-    echo "[1/8] Backup /etc/fstab già presente ($FSTAB_BAK)"
+    echo "[1/8] Backup /etc/fstab already present ($FSTAB_BAK)"
 fi
 
 # 2. Setup mount point /data and verify block device
@@ -81,7 +81,7 @@ mkdir -p /data
 
 if [ -n "$DATA_DEV" ]; then
     if [ ! -b "$DATA_DEV" ]; then
-        echo "[ERRORE] Il dispositivo specificato '$DATA_DEV' non è un block device valido." >&2
+        echo "[ERROR] The specified device '$DATA_DEV' is not a valid block device." >&2
         exit 1
     fi
 
@@ -90,24 +90,24 @@ if [ -n "$DATA_DEV" ]; then
     REAL_DATA="$(readlink -f "$DATA_DEV" 2>/dev/null || echo "$DATA_DEV")"
 
     if [ -n "$ROOT_DEV" ] && [ "$REAL_DATA" = "$(readlink -f "$ROOT_DEV" 2>/dev/null || echo "$ROOT_DEV")" ]; then
-        echo "[ERRORE] Il dispositivo $DATA_DEV corrisponde alla partizione root (/)! Impossibile usarlo per /data." >&2
+        echo "[ERROR] Device $DATA_DEV corresponds to root partition (/)! Cannot use for /data." >&2
         exit 1
     fi
 
     if [ -n "$BOOT_DEV" ] && [ "$REAL_DATA" = "$(readlink -f "$BOOT_DEV" 2>/dev/null || echo "$BOOT_DEV")" ]; then
-        echo "[ERRORE] Il dispositivo $DATA_DEV corrisponde alla partizione boot! Impossibile usarlo per /data." >&2
+        echo "[ERROR] Device $DATA_DEV corresponds to boot partition! Cannot use for /data." >&2
         exit 1
     fi
 
-    echo "[2/8] Controllo filesystem su dispositivo dedicato $DATA_DEV..."
+    echo "[2/8] Checking filesystem on dedicated device $DATA_DEV..."
     FSTYPE="$(blkid -s TYPE -o value "$DATA_DEV" 2>/dev/null || true)"
     if [ -z "$FSTYPE" ]; then
-        echo "      Nessun filesystem rilevato su $DATA_DEV. Formattazione ext4 (label: HidaData)..."
+        echo "      No filesystem detected on $DATA_DEV. Formatting ext4 (label: HidaData)..."
         mkfs.ext4 -F -L HidaData "$DATA_DEV"
     elif [ "$FSTYPE" != "ext4" ]; then
-        echo "      [AVVISO] Filesystem esistente rilevato: $FSTYPE"
+        echo "      [NOTICE] Existing filesystem detected: $FSTYPE"
     else
-        echo "      Filesystem ext4 esistente rilevato: preservazione dati esistenti senza formattazione."
+        echo "      Existing ext4 filesystem detected: preserving existing data without formatting."
     fi
 
     DATA_UUID="$(blkid -s UUID -o value "$DATA_DEV" 2>/dev/null || true)"
@@ -116,40 +116,40 @@ if [ -n "$DATA_DEV" ]; then
             echo "UUID=$DATA_UUID   /data   ext4   defaults,noatime,errors=remount-ro   0   2" >> "$FSTAB"
         fi
     else
-        echo "[ERRORE] Impossibile recuperare l'UUID di $DATA_DEV." >&2
+        echo "[ERROR] Unable to retrieve UUID for $DATA_DEV." >&2
         exit 1
     fi
 
     # Mount and check
     mount /data
     if ! mountpoint -q /data; then
-        echo "[ERRORE CRITICO] Impossibile montare /data su $DATA_DEV. Operazione interrotta prima di attivare RO." >&2
+        echo "[CRITICAL ERROR] Unable to mount /data on $DATA_DEV. Aborted before activating RO." >&2
         exit 1
     fi
 
     # Test writability
     if ! (touch /data/.write_test 2>/dev/null && rm -f /data/.write_test 2>/dev/null); then
-        echo "[ERRORE CRITICO] Il mount point /data non è scrivibile. Operazione interrotta prima di attivare RO." >&2
+        echo "[CRITICAL ERROR] The /data mount point is not writable. Aborted before activating RO." >&2
         exit 1
     fi
 elif grep -q "[[:space:]]/data[[:space:]]" "$FSTAB"; then
-    echo "[2/8] Partizione /data già registrata in /etc/fstab."
+    echo "[2/8] /data partition already registered in /etc/fstab."
     mount /data 2>/dev/null || true
     if ! mountpoint -q /data; then
-        echo "[ERRORE CRITICO] Il mount point /data presente in fstab non è montabile." >&2
+        echo "[CRITICAL ERROR] The /data mount point present in fstab is not mountable." >&2
         exit 1
     fi
 else
-    echo "[ERRORE] Nessun dispositivo specificato per la partizione dati /data." >&2
-    echo "         La modalità Root Read-Only (Soluzione B) richiede una partizione indipendente scrivibile" >&2
-    echo "         (es. /dev/mmcblk0p3 o dispositivo di archiviazione dedicato) per salvare credenziali e configurazioni." >&2
-    echo "         Una cartella ordinaria su / non garantisce persistenza quando la root viene bloccata in RO." >&2
-    echo "         Esegui: sudo bash $0 <partizione_dati>" >&2
+    echo "[ERROR] No device specified for /data data partition." >&2
+    echo "         Root Read-Only mode (Solution B) requires an independent writable partition" >&2
+    echo "         (e.g. /dev/mmcblk0p3 or dedicated storage device) to persist credentials and configs." >&2
+    echo "         A standard directory on / does not guarantee persistence when root is locked in RO." >&2
+    echo "         Run: sudo bash $0 <data_partition>" >&2
     exit 1
 fi
 
 # 3. Create persistent directories on /data
-echo "[3/8] Creazione struttura cartelle persistenti in /data..."
+echo "[3/8] Creating persistent directory structure in /data..."
 mkdir -p /data/thinclient-config
 mkdir -p /data/tailscale
 mkdir -p /data/NetworkManager/system-connections
@@ -158,7 +158,7 @@ chmod 700 /data/tailscale
 chmod 700 /data/thinclient-config
 
 # 4. Migrate configurations preserving permissions
-echo "[4/8] Migrazione delle configurazioni attuali in /data..."
+echo "[4/8] Migrating current configurations to /data..."
 
 # Thinclient config
 if [ -d "$THINCLIENT_DIR/config" ]; then
@@ -177,7 +177,7 @@ if [ -d "/etc/NetworkManager/system-connections" ]; then
 fi
 
 # 5. Configure persistent mounts in /etc/fstab
-echo "[5/8] Configurazione bind-mount persistenti in /etc/fstab..."
+echo "[5/8] Configuring persistent bind-mounts in /etc/fstab..."
 
 add_fstab_entry() {
     local SRC="$1"
@@ -194,7 +194,7 @@ if [ -d "$THINCLIENT_DIR/config" ]; then
 fi
 
 # 6. Configure tmpfs (RAM) in /etc/fstab
-echo "[6/8] Configurazione partizioni RAM volatili (tmpfs)..."
+echo "[6/8] Configuring volatile RAM partitions (tmpfs)..."
 
 add_tmpfs_entry() {
     local MNT="$1"
@@ -210,7 +210,7 @@ add_tmpfs_entry "/var/log" "defaults,noatime,nosuid,mode=0755,size=64m"
 add_tmpfs_entry "/var/spool" "defaults,noatime,nosuid,size=32m"
 
 # 7. Configure systemd journald and services for Read-Only
-echo "[7/8] Configurazione systemd-journald e disabilitazione swap su disco..."
+echo "[7/8] Configuring systemd-journald and disabling swap on disk..."
 mkdir -p /etc/systemd/journald.conf.d/
 cat << 'EOF' > /etc/systemd/journald.conf.d/readonly.conf
 [Journal]
@@ -219,7 +219,7 @@ RuntimeMaxUse=32M
 EOF
 
 # Disable SD-card swap services and configure in-RAM zram swap
-echo "[7b/8] Configurazione swap nativo in RAM (zram) e rimozione swapfile SD..."
+echo "[7b/8] Configuring native in-RAM swap (zram) and removing SD swapfile..."
 if [ -d /etc/rpi ]; then
     cat << 'EOF' > /etc/rpi/swap.conf
 [Main]
@@ -240,7 +240,7 @@ if [ -f /var/lib/systemd/random-seed ]; then
 fi
 
 # 8. Set root (/) and /boot to RO in /etc/fstab
-echo "[8/8] Attivazione flag Read-Only ('ro') su / e /boot in /etc/fstab..."
+echo "[8/8] Activating Read-Only ('ro') flag on / and /boot in /etc/fstab..."
 
 # Replace root mount options idempotently
 if ! grep -E '[[:space:]]/[[:space:]]+ext4[[:space:]]+.*ro' "$FSTAB" >/dev/null 2>&1; then
@@ -256,11 +256,11 @@ fi
 # 9. Install terminal helpers (ro, rw, fs-status)
 cat << 'EOF' > /etc/profile.d/readonly-helpers.sh
 # HidaThin Read-Only Quick Maintenance Aliases
-alias ro='sync && mount -o remount,ro,bind /opt/thinclient/config 2>/dev/null; mount -o remount,ro,bind /etc/NetworkManager/system-connections 2>/dev/null; mount -o remount,ro,bind /var/lib/tailscale 2>/dev/null; (mount -o remount,ro /boot/firmware 2>/dev/null || mount -o remount,ro /boot 2>/dev/null); sync && mount -o remount,ro / && echo "[OK] Filesystem bloccato in SOLA LETTURA (RO)"'
-alias rw='mount -o remount,rw / && (mount -o remount,rw /boot/firmware 2>/dev/null || mount -o remount,rw /boot 2>/dev/null); mount -o remount,rw,bind /opt/thinclient/config 2>/dev/null; mount -o remount,rw,bind /etc/NetworkManager/system-connections 2>/dev/null; mount -o remount,rw,bind /var/lib/tailscale 2>/dev/null; echo "[ATTENZIONE] Filesystem sbloccato in SCRITTURA (RW)"'
+alias ro='sync && mount -o remount,ro,bind /opt/thinclient/config 2>/dev/null; mount -o remount,ro,bind /etc/NetworkManager/system-connections 2>/dev/null; mount -o remount,ro,bind /var/lib/tailscale 2>/dev/null; (mount -o remount,ro /boot/firmware 2>/dev/null || mount -o remount,ro /boot 2>/dev/null); sync && mount -o remount,ro / && echo "[OK] Filesystem locked in READ-ONLY (RO)"'
+alias rw='mount -o remount,rw / && (mount -o remount,rw /boot/firmware 2>/dev/null || mount -o remount,rw /boot 2>/dev/null); mount -o remount,rw,bind /opt/thinclient/config 2>/dev/null; mount -o remount,rw,bind /etc/NetworkManager/system-connections 2>/dev/null; mount -o remount,rw,bind /var/lib/tailscale 2>/dev/null; echo "[WARNING] Filesystem unlocked in READ-WRITE (RW)"'
 
 fs-status() {
-    echo "--- STATO FILESYSTEM HIDATHIN ---"
+    echo "--- HIDATHIN FILESYSTEM STATUS ---"
     grep -E " / |/boot|/data" /proc/mounts | awk '{print $2 " (" $3 ") -> " $4}'
 }
 EOF
@@ -268,14 +268,14 @@ chmod +x /etc/profile.d/readonly-helpers.sh
 
 echo ""
 echo "=========================================================="
-echo " [SUCCESSO] CONFIGURAZIONE SOLUZIONE B COMPLETATA!"
+echo " [SUCCESS] SOLUTION B CONFIGURATION COMPLETED!"
 echo "=========================================================="
-echo "Al prossimo riavvio:"
-echo " - La scheda SD (Root e Boot) sarà protetta al 100% in Sola Lettura."
-echo " - I salvataggi dei PC, Wi-Fi e Tailscale scriveranno su /data in modo persistente."
-echo " - Dall'interfaccia web ('Impostazioni') potrai cliccare:"
-echo "   'Aggiorna Sistema Operativo (Debian)' per aggiornare in totale sicurezza."
+echo "On next reboot:"
+echo " - The SD card (Root and Boot) will be 100% protected in Read-Only mode."
+echo " - Saved PCs, Wi-Fi profiles, and Tailscale state will persist on /data."
+echo " - From the web interface ('Settings') you can click:"
+echo "   'Update Operating System (Debian)' to perform safe OS updates."
 echo ""
-echo "Per applicare subito, riavvia il sistema:"
+echo "To apply changes immediately, reboot the system:"
 echo "   sudo reboot"
 echo "=========================================================="

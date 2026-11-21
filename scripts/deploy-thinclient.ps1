@@ -13,7 +13,7 @@ $TempArchive = Join-Path $env:TEMP "thinclient-update-$([System.Guid]::NewGuid()
 $ProjectDir = (Get-Item $PSScriptRoot).Parent.FullName
 
 try {
-    Write-Host "[1/4] Creazione archivio temporaneo di aggiornamento..." -ForegroundColor Yellow
+    Write-Host "[1/4] Creating temporary update archive..." -ForegroundColor Yellow
     Push-Location $ProjectDir
     tar -czf "$TempArchive" `
         --exclude="__pycache__" `
@@ -23,10 +23,10 @@ try {
         app scripts src static systemd templates tests install.sh CHANGELOG.md
     Pop-Location
 
-    Write-Host "[2/4] Trasferimento archivio su thin client via SCP..." -ForegroundColor Yellow
+    Write-Host "[2/4] Transferring archive to thin client via SCP..." -ForegroundColor Yellow
     scp -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$TempArchive" "${User}@${TargetHost}:/tmp/thinclient-update.tar.gz"
 
-    Write-Host "[3/4] Applicazione aggiornamento su /opt/thinclient (RW remount)..." -ForegroundColor Yellow
+    Write-Host "[3/4] Applying update to /opt/thinclient (RW remount)..." -ForegroundColor Yellow
     $RemoteScript = @'
 set -e
 mount -o remount,rw /
@@ -35,25 +35,25 @@ rm -f /tmp/thinclient-update.tar.gz
 find /opt/thinclient -path /opt/thinclient/config -prune -o -path "*/__pycache__*" -prune -o -type f \( -name "*.sh" -o -name "xinitrc" -o -name "*.py" -o -name "*.service" -o -name "*.html" -o -name "*.yaml" -o -name "*.css" -o -name "*.js" -o -name "Makefile" -o -name "*.c" \) -exec sed -i 's/\r$//' {} + 2>/dev/null || true
 chmod +x /opt/thinclient/scripts/* /opt/thinclient/app/*.py 2>/dev/null || true
 if [ -d /opt/thinclient/src ] && command -v make >/dev/null 2>&1; then
-    echo "Compilazione client nativo hidathin-rdp..."
-    make -C /opt/thinclient/src clean && make -C /opt/thinclient/src && make -C /opt/thinclient/src install || echo "[WARN] Compilazione hidathin-rdp non riuscita, mantenuto fallback xfreerdp3."
+    echo "Compiling native hidathin-rdp client..."
+    make -C /opt/thinclient/src clean && make -C /opt/thinclient/src && make -C /opt/thinclient/src install || echo "[WARN] hidathin-rdp compilation failed, kept fallback xfreerdp3."
 fi
 sync
-echo "Aggiornamento applicato con successo su /opt/thinclient."
+echo "Update applied successfully to /opt/thinclient."
 '@.Replace("`r`n", "`n")
 
     $RemoteScript | ssh -o ConnectTimeout=15 "${User}@${TargetHost}" "cat > /tmp/do-update.sh && bash /tmp/do-update.sh && rm -f /tmp/do-update.sh"
 
     if (-not $NoReboot) {
-        Write-Host "[4/4] Riavvio del thin client in corso..." -ForegroundColor Green
+        Write-Host "[4/4] Rebooting thin client..." -ForegroundColor Green
         try {
             ssh -o ConnectTimeout=5 "${User}@${TargetHost}" "nohup reboot >/dev/null 2>&1 &"
         } catch {
             # Connection drop during reboot is expected
         }
-        Write-Host "Thin client riavviato! Filesystem Read-Only e nuovi servizi in esecuzione." -ForegroundColor Green
+        Write-Host "Thin client rebooted! Read-Only filesystem and new services running." -ForegroundColor Green
     } else {
-        Write-Host "[4/4] Riavvio saltato (-NoReboot specificato). Riavviare manualmente per applicare." -ForegroundColor Cyan
+        Write-Host "[4/4] Reboot skipped (-NoReboot specified). Reboot manually to apply." -ForegroundColor Cyan
     }
 }
 finally {

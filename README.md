@@ -106,21 +106,21 @@ Distraction-free, appliance-grade connection interface displaying live Wi-Fi and
 
 ### ⚡ Quick Automated Install (Recommended)
 
-Flash Raspberry Pi OS Lite (64-bit consigliato) sulla MicroSD, abilita SSH, connettiti al Raspberry Pi ed esegui il comando di installazione automatica:
+Flash Raspberry Pi OS Lite (64-bit recommended) to your MicroSD card, enable SSH, connect to the Raspberry Pi, and run the automated installation command:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/hidaba/HidaThin/main/install.sh | sudo bash
 ```
 
-Lo script si occupa automaticamente di:
-- Aggiornare APT e installare tutti i pacchetti necessari (Xorg, Openbox, Chromium kiosk, Python 3, Flask, FreeRDP 3, VNC, NetworkManager).
-- Installare e avviare Tailscale WireGuard Mesh.
-- Distribuire il codice in `/opt/thinclient` con i corretti permessi.
-- Configurare le ottimizzazioni hardware: CPU governor `performance`, accelerazione puntatore lineare (`flat` profile), polling mouse USB a 500 Hz, allocazione GPU a 128 MB e tuning swappiness.
-- Applicare lo script di Fast-Boot per ridurre al minimo i tempi di avvio su MicroSD.
-- Installare e avviare tutti i servizi systemd (`thinclient.service`, `thinclient-ui.service`, `thinclient-vnc.service`, `cpu-governor.service`).
+The script automatically performs:
+- Updating APT sources and installing all required packages (Xorg, Openbox, Chromium kiosk, Python 3, Flask, FreeRDP 3, VNC, NetworkManager).
+- Installing and enabling Tailscale WireGuard Mesh.
+- Deploying project files to `/opt/thinclient` with appropriate ownership and permissions.
+- Configuring hardware optimizations: CPU governor `performance`, linear pointer acceleration (`flat` profile), 500 Hz USB mouse polling, 128 MB GPU allocation, and swappiness tuning.
+- Applying Fast-Boot script to minimize boot times on MicroSD storage.
+- Installing and starting all systemd services (`thinclient.service`, `thinclient-ui.service`, `thinclient-vnc.service`, `cpu-governor.service`).
 
-Una volta terminato, autentica Tailscale e riavvia:
+Once completed, authenticate Tailscale and reboot:
 ```bash
 sudo tailscale up --accept-routes
 sudo reboot
@@ -130,7 +130,7 @@ sudo reboot
 
 ### Manual Installation & Step-by-Step Setup
 
-Se preferisci eseguire l'installazione manualmente passo dopo passo:
+If you prefer to perform the installation manually step by step:
 
 #### 1. Base OS Preparation & Core Packages
 
@@ -243,7 +243,7 @@ Configure `/opt/thinclient/config/settings.yaml`:
 version: 1
 profile: "balanced"          # performance | balanced | quality
 resolution: "auto"           # auto | 1920x1080 | 1600x900 | 1280x720
-color_depth: 32              # 16 | 24 | 32 (32 consigliato per ClearType nativo)
+color_depth: 32              # 16 | 24 | 32 (32 recommended for native ClearType)
 sound: true
 auto_reconnect: true
 max_reconnect_retries: 3
@@ -262,7 +262,7 @@ startup:
   connect_timeout_seconds: 20
   max_initial_attempts: 1
   fallback_to_dashboard: true
-  splash_min_duration_seconds: 2  # Dwell time per le 4 fasi di connessione nello splash (0 per istantaneo)
+  splash_min_duration_seconds: 2  # Dwell time for the 4 connection phases in the splash (0 for instant)
 ```
 
 Configure the VNC remote assistance password (required before starting VNC):
@@ -271,14 +271,14 @@ sudo x11vnc -storepasswd "YourSecurePassword" /opt/thinclient/config/x11vnc.pass
 sudo chmod 600 /opt/thinclient/config/x11vnc.pass
 ```
 
-### 5b. Ottimizzazione Host Windows (Sblocco 60 FPS & ClearType)
+### 5b. Windows Host Optimization (Unlock 60 FPS & ClearType)
 
-Per sbloccare il framerate massimo di Windows RDP da 30 a **60 FPS** (`DWMFRAMEINTERVAL = 15`) e abilitare l'accelerazione GPU hardware:
-- Eseguire come Amministratore sul PC Windows lo script:
+To unlock the maximum Windows RDP framerate from 30 to **60 FPS** (`DWMFRAMEINTERVAL = 15`) and enable hardware GPU acceleration:
+- Run the following script as Administrator on the target Windows PC:
   ```powershell
   powershell -ExecutionPolicy Bypass -File scripts\tune-windows-rdp-host.ps1
   ```
-  oppure importare il file di registro `scripts\tune-windows-rdp-host.reg`.
+  or import the registry file `scripts\tune-windows-rdp-host.reg`.
 
 ### 6. Enable and Start Systemd Services
 
@@ -359,7 +359,7 @@ Supervisors or IT support personnel can view and control the thin client display
 - An on-screen status badge notifies the local user that remote assistance is active.
 
 ### 7. Diagnostics & System Health
-Access the **Diagnostica** tab to inspect:
+Access the **Diagnostics** tab to inspect:
 - Real-time MagicDNS latency and port 3389 reachability.
 - RAM usage, CPU temperature, and load average.
 - Undervoltage or thermal throttling alarms reported by the Raspberry Pi firmware.
@@ -372,7 +372,7 @@ For dedicated fixed workstations, HidaThin can bypass Chromium Kiosk on boot and
     mode: "direct_rdp"
     connect_timeout_seconds: 20
     fallback_to_dashboard: true
-    splash_min_duration_seconds: 2  # Dwell time per le 4 fasi di connessione nello splash (0 per istantaneo)
+    splash_min_duration_seconds: 2  # Dwell time for the 4 connection phases in the splash (0 for instant)
   ```
 - At boot, the system waits for network and Tailscale, launches FreeRDP full-screen immediately.
 - If the remote PC is unreachable, authentication fails, or the session is voluntarily disconnected, the system automatically opens the Dashboard Kiosk without looping.
@@ -407,7 +407,7 @@ python3 -m pytest tests/ -v
 │   ├── install.sh       # Wrapper for the root installer
 │   ├── direct_rdp_coordinator.py # Direct-to-RDP coordinator and fallback manager
 │   ├── optimize-boot.sh # Aggressive systemd service pruning for ultra-fast boot
-│   ├── setup-readonly-fs.sh # Soluzione B: Read-Only root + persistent /data
+│   ├── setup-readonly-fs.sh # Solution B: Read-Only root + persistent /data
 │   ├── xinitrc          # X11 kiosk initialization (Openbox + Chromium)
 │   └── x11vnc-start.sh  # x11vnc watchdog with strict Tailscale binding
 ├── tests/

@@ -32,8 +32,8 @@ echo -e "${NC}\n"
 # 1. Privileges check
 # ------------------------------------------------------------------------------
 if [ "$(id -u)" -ne 0 ]; then
-    echo -e "${RED}[ERROR] Questo script richiede privilegi di amministratore (root).${NC}" >&2
-    echo -e "Rilancialo con: ${BOLD}sudo bash $0${NC} o ${BOLD}curl -sSL ... | sudo bash${NC}" >&2
+    echo -e "${RED}[ERROR] This script requires administrative (root) privileges.${NC}" >&2
+    echo -e "Rerun with: ${BOLD}sudo bash $0${NC} or ${BOLD}curl -sSL ... | sudo bash${NC}" >&2
     exit 1
 fi
 
@@ -55,26 +55,26 @@ fi
 # ------------------------------------------------------------------------------
 # 2. System Architecture & Distribution Verification
 # ------------------------------------------------------------------------------
-echo -e "${BLUE}[1/8] Verifica dell'ambiente di sistema...${NC}"
+echo -e "${BLUE}[1/8] Checking system environment...${NC}"
 
 if [ ! -f /etc/os-release ]; then
-    echo -e "${RED}[ERROR] Impossibile rilevare la distribuzione (/etc/os-release assente).${NC}" >&2
+    echo -e "${RED}[ERROR] Unable to detect distribution (/etc/os-release missing).${NC}" >&2
     exit 1
 fi
 
 . /etc/os-release
-echo -e "      OS Rilevato: ${BOLD}${PRETTY_NAME:-$ID}${NC}"
-echo -e "      Architettura: ${BOLD}$(uname -m)${NC}"
+echo -e "      Detected OS: ${BOLD}${PRETTY_NAME:-$ID}${NC}"
+echo -e "      Architecture: ${BOLD}$(uname -m)${NC}"
 
 # Check for Debian / Raspberry Pi OS family
 if [[ "$ID" != "raspbian" && "$ID" != "debian" && "$ID_LIKE" != *"debian"* ]]; then
-    echo -e "${YELLOW}[WARN] Il sistema rilevato non è Raspbian/Debian standard. Procedo comunque con cautela...${NC}"
+    echo -e "${YELLOW}[WARN] Detected OS is not standard Raspbian/Debian. Proceeding with caution...${NC}"
 fi
 
 # ------------------------------------------------------------------------------
 # 3. APT Dependencies Installation
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[2/8] Aggiornamento sorgenti APT e installazione pacchetti di sistema...${NC}"
+echo -e "\n${BLUE}[2/8] Updating APT sources and installing system packages...${NC}"
 apt-get update -y
 
 PACKAGES_CORE=(
@@ -98,21 +98,21 @@ PACKAGES_CORE=(
     adwaita-icon-theme
 )
 
-echo -e "      Installazione pacchetti base..."
+echo -e "      Installing core packages..."
 apt-get install -y "${PACKAGES_CORE[@]}"
 
 # Handle Chromium package (optional fallback; HidaThin now defaults to Native Tkinter Launcher)
-echo -e "      Installazione browser Chromium per Kiosk UI (fallback opzionale)..."
+echo -e "      Installing Chromium browser for Kiosk UI (optional fallback)..."
 if ! apt-get install -y chromium 2>/dev/null; then
     if ! apt-get install -y chromium-browser 2>/dev/null; then
-        echo -e "${YELLOW}[WARN] Impossibile trovare 'chromium' o 'chromium-browser' via APT standard.${NC}"
+        echo -e "${YELLOW}[WARN] Could not find 'chromium' or 'chromium-browser' via standard APT.${NC}"
     fi
 fi
 
 # Handle FreeRDP 3 with fallback to FreeRDP 2 if on older distro
-echo -e "      Installazione client FreeRDP e librerie di compilazione per hidathin-rdp..."
+echo -e "      Installing FreeRDP client and build libraries for hidathin-rdp..."
 if ! apt-get install -y freerdp3-x11 2>/dev/null; then
-    echo -e "${YELLOW}[WARN] Pacchetto freerdp3-x11 non disponibile nel repository APT. Provo freerdp2-x11...${NC}"
+    echo -e "${YELLOW}[WARN] Package freerdp3-x11 not available in APT repository. Trying freerdp2-x11...${NC}"
     apt-get install -y freerdp2-x11 || true
 fi
 
@@ -120,28 +120,28 @@ fi
 apt-get install -y --no-install-recommends \
     gcc make pkg-config freerdp3-dev libwinpr3-dev \
     libx11-dev libxext-dev libxkbfile-dev libxcursor-dev zlib1g-dev 2>/dev/null || \
-    echo -e "${YELLOW}[WARN] Header freerdp3-dev non disponibili; verrà usato xfreerdp3 standard.${NC}"
+    echo -e "${YELLOW}[WARN] Development headers freerdp3-dev not available; standard xfreerdp3 will be used.${NC}"
 
 # ------------------------------------------------------------------------------
 # 4. Tailscale Mesh VPN Installation
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[3/8] Controllo e installazione di Tailscale WireGuard Mesh...${NC}"
+echo -e "\n${BLUE}[3/8] Checking and installing Tailscale WireGuard Mesh...${NC}"
 if command -v tailscale >/dev/null 2>&1; then
-    echo -e "      ${GREEN}[OK]${NC} Tailscale è già installato ($(tailscale version | head -n1))."
+    echo -e "      ${GREEN}[OK]${NC} Tailscale is already installed ($(tailscale version | head -n1))."
 else
-    echo -e "      Installazione ufficiale Tailscale in corso..."
+    echo -e "      Installing official Tailscale..."
     curl -fsSL https://tailscale.com/install.sh | sh
     systemctl enable --now tailscaled || true
-    echo -e "      ${GREEN}[OK]${NC} Tailscale installato e servizio tailscaled abilitato."
+    echo -e "      ${GREEN}[OK]${NC} Tailscale installed and tailscaled service enabled."
 fi
 
 # ------------------------------------------------------------------------------
 # 5. Deploy / Synchronize HidaThin Repository to /opt/thinclient
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[4/8] Distribuzione del codice in ${INSTALL_DIR}...${NC}"
+echo -e "\n${BLUE}[4/8] Deploying codebase to ${INSTALL_DIR}...${NC}"
 
 if [ -n "$SCRIPT_SOURCE_DIR" ] && [ "$SCRIPT_SOURCE_DIR" != "$INSTALL_DIR" ]; then
-    echo -e "      Sincronizzazione file da directory locale: ${SCRIPT_SOURCE_DIR}"
+    echo -e "      Synchronizing files from local directory: ${SCRIPT_SOURCE_DIR}"
     mkdir -p "$INSTALL_DIR"
     for item in "$SCRIPT_SOURCE_DIR"/*; do
         base="$(basename "$item")"
@@ -159,7 +159,7 @@ if [ -n "$SCRIPT_SOURCE_DIR" ] && [ "$SCRIPT_SOURCE_DIR" != "$INSTALL_DIR" ]; th
         fi
     done
 elif [ ! -d "$INSTALL_DIR/.git" ] && [ ! -f "$INSTALL_DIR/app/main.py" ]; then
-    echo -e "      Clonazione del repository GitHub ${REPO_URL} in directory di staging..."
+    echo -e "      Cloning GitHub repository ${REPO_URL} into staging directory..."
     STAGING_DIR="/tmp/hidathin-staging-$$"
     rm -rf "$STAGING_DIR"
     git clone "$REPO_URL" "$STAGING_DIR"
@@ -168,10 +168,10 @@ elif [ ! -d "$INSTALL_DIR/.git" ] && [ ! -f "$INSTALL_DIR/app/main.py" ]; then
     [ -d "$STAGING_DIR/.git" ] && cp -a "$STAGING_DIR/.git" "$INSTALL_DIR/"
     rm -rf "$STAGING_DIR"
 else
-    echo -e "      Repository già presente in ${INSTALL_DIR}."
+    echo -e "      Repository already present in ${INSTALL_DIR}."
     if [ -d "$INSTALL_DIR/.git" ]; then
-        echo -e "      Aggiornamento (git pull) con salvaguardia delle modifiche locali..."
-        git -C "$INSTALL_DIR" pull --ff-only origin main || echo -e "${YELLOW}[WARN] Git pull non completato; mantenuta versione corrente.${NC}"
+        echo -e "      Updating (git pull) while preserving local modifications..."
+        git -C "$INSTALL_DIR" pull --ff-only origin main || echo -e "${YELLOW}[WARN] Git pull incomplete; keeping current version.${NC}"
     fi
 fi
 
@@ -211,6 +211,8 @@ sound: true
 auto_reconnect: true
 max_reconnect_retries: 3
 fullscreen: true
+tailscale:
+  enabled: true
 vnc:
   enabled: true
   port: 5900
@@ -238,26 +240,27 @@ chmod -R u=rwX,go=rX "$INSTALL_DIR"
 chmod 700 "$INSTALL_DIR/config"
 chmod 600 "$INSTALL_DIR/config/"*.yaml "$INSTALL_DIR/config/"*.pass 2>/dev/null || true
 chmod +x "$INSTALL_DIR/scripts/"*.sh "$INSTALL_DIR/scripts/xinitrc" "$INSTALL_DIR/scripts/"*.py "$INSTALL_DIR/app/"*.py "$INSTALL_DIR/install.sh" 2>/dev/null || true
+
 # Compile & install native WTware-style hidathin-rdp client if sources and headers are present
 if [ -d "$INSTALL_DIR/src" ] && command -v make >/dev/null 2>&1; then
-    echo -e "      Compilazione client nativo Zero-Copy ${BOLD}hidathin-rdp${NC}..."
+    echo -e "      Compiling Zero-Copy native client ${BOLD}hidathin-rdp${NC}..."
     if make -C "$INSTALL_DIR/src" clean >/dev/null 2>&1 && make -C "$INSTALL_DIR/src" >/dev/null 2>&1 && make -C "$INSTALL_DIR/src" install >/dev/null 2>&1; then
-        echo -e "      ${GREEN}[OK]${NC} Client nativo /usr/local/bin/hidathin-rdp compilato e installato."
+        echo -e "      ${GREEN}[OK]${NC} Native client /usr/local/bin/hidathin-rdp compiled and installed."
     else
-        echo -e "      ${YELLOW}[WARN]${NC} Compilazione hidathin-rdp saltata; attivo fallback xfreerdp3."
+        echo -e "      ${YELLOW}[WARN]${NC} hidathin-rdp compilation skipped; fallback xfreerdp3 active."
     fi
 fi
 
 # ------------------------------------------------------------------------------
 # 6. Hardware, Kernel & OS Optimizations
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[5/8] Applicazione ottimizzazioni hardware, input e kernel...${NC}"
+echo -e "\n${BLUE}[5/8] Applying hardware, input, and kernel optimizations...${NC}"
 
 # A. Xorg Linear Flat Mouse Acceleration Profile
 mkdir -p /etc/X11/xorg.conf.d
 if [ -f "$INSTALL_DIR/config/50-mouse.conf" ]; then
     cp "$INSTALL_DIR/config/50-mouse.conf" /etc/X11/xorg.conf.d/50-mouse.conf
-    echo -e "      ${GREEN}[OK]${NC} Configurazione puntatore Xorg (flat profile 1:1) applicata."
+    echo -e "      ${GREEN}[OK]${NC} Xorg pointer configuration (1:1 flat profile) applied."
 fi
 
 # B. Swappiness & TCP Low-Latency RDP Tuning (WTware-derived transport settings)
@@ -272,20 +275,20 @@ net.ipv4.tcp_fin_timeout=15
 EOF
 sysctl -p /etc/sysctl.d/99-swappiness.conf >/dev/null 2>&1 || true
 sysctl -p /etc/sysctl.d/99-rdp-network.conf >/dev/null 2>&1 || true
-echo -e "      ${GREEN}[OK]${NC} vm.swappiness=10 e tuning TCP low-latency RDP applicati."
+echo -e "      ${GREEN}[OK]${NC} Applied vm.swappiness=10 and low-latency TCP RDP tuning."
 
 # C. Logrotate configuration
 if [ -f "$INSTALL_DIR/config/thinclient.logrotate" ]; then
     cp "$INSTALL_DIR/config/thinclient.logrotate" /etc/logrotate.d/thinclient
     chmod 644 /etc/logrotate.d/thinclient
-    echo -e "      ${GREEN}[OK]${NC} Logrotate configurato per i log di sessione RDP/UI."
+    echo -e "      ${GREEN}[OK]${NC} Logrotate configured for RDP/UI session logs."
 fi
 
 # D. Raspberry Pi Boot Configuration (config.txt -> gpu_mem=128, arm_boost=1, avoid_warnings=2)
 CONFIG_TXT=""
 if [ -f /boot/firmware/config.txt ]; then
     CONFIG_TXT="/boot/firmware/config.txt"
-elif [ -f /boot/config.txt ]; then
+    elif [ -f /boot/config.txt ]; then
     CONFIG_TXT="/boot/config.txt"
 fi
 
@@ -294,29 +297,29 @@ if [ -n "$CONFIG_TXT" ]; then
         CURRENT_MEM=$(grep "^gpu_mem=" "$CONFIG_TXT" | head -n1 | cut -d'=' -f2)
         if [ "$CURRENT_MEM" -lt 128 ] 2>/dev/null; then
             sed -i 's/^gpu_mem=.*/gpu_mem=128/' "$CONFIG_TXT"
-            echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: gpu_mem aggiornato a 128 MB."
+            echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: gpu_mem updated to 128 MB."
         else
-            echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: gpu_mem già adeguato (${CURRENT_MEM} MB)."
+            echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: gpu_mem already sufficient (${CURRENT_MEM} MB)."
         fi
     else
         echo "gpu_mem=128" >> "$CONFIG_TXT"
-        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto gpu_mem=128."
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: added gpu_mem=128."
     fi
     if ! grep -q "^disable_splash=" "$CONFIG_TXT"; then
         echo "disable_splash=1" >> "$CONFIG_TXT"
-        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto disable_splash=1 (disabilita arcobaleno GPU)."
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: added disable_splash=1 (disables GPU rainbow square)."
     fi
     if ! grep -q "^disable_overscan=" "$CONFIG_TXT"; then
         echo "disable_overscan=1" >> "$CONFIG_TXT"
-        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto disable_overscan=1 (disabilita overscan firmware per gestione KMS)."
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: added disable_overscan=1 (disables firmware overscan for KMS management)."
     fi
     if ! grep -q "^arm_boost=" "$CONFIG_TXT"; then
         echo "arm_boost=1" >> "$CONFIG_TXT"
-        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto arm_boost=1 (frequenza boost CPU massima)."
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: added arm_boost=1 (maximum CPU boost frequency)."
     fi
     if ! grep -q "^avoid_warnings=" "$CONFIG_TXT"; then
         echo "avoid_warnings=2" >> "$CONFIG_TXT"
-        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: aggiunto avoid_warnings=2 (previene interferenze overlay OSD firmware su KMS)."
+        echo -e "      ${GREEN}[OK]${NC} $CONFIG_TXT: added avoid_warnings=2 (prevents firmware overlay from disrupting KMS)."
     fi
 fi
 
@@ -332,9 +335,9 @@ if [ -n "$CMDLINE_TXT" ]; then
     if ! grep -q "usbhid.mousepoll=" "$CMDLINE_TXT"; then
         # Must preserve single line in cmdline.txt
         sed -i 's/$/ usbhid.mousepoll=2/' "$CMDLINE_TXT"
-        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: aggiunto usbhid.mousepoll=2 (polling mouse a 500 Hz)."
+        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: added usbhid.mousepoll=2 (500 Hz mouse polling)."
     else
-        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: usbhid.mousepoll già configurato."
+        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: usbhid.mousepoll already configured."
     fi
 
     # F. Raspberry Pi Quiet Boot (suppress kernel & systemd console warnings)
@@ -347,26 +350,26 @@ if [ -n "$CMDLINE_TXT" ]; then
         fi
     done
     if [ "$MODIFIED_PARAMS" = true ]; then
-        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: abilitato Silent Boot (quiet, loglevel=3, cursore console nascosto)."
+        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: enabled Silent Boot (quiet, loglevel=3, hidden console cursor)."
     else
-        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: Silent Boot già configurato."
+        echo -e "      ${GREEN}[OK]${NC} $CMDLINE_TXT: Silent Boot already configured."
     fi
 fi
 
 # ------------------------------------------------------------------------------
 # 7. Fast-Boot Systemd Services Pruning
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[6/8] Applicazione Fast Boot (pruning dei servizi di background non essenziali)...${NC}"
+echo -e "\n${BLUE}[6/8] Applying Fast Boot (pruning non-essential background services)...${NC}"
 if [ -f "$INSTALL_DIR/scripts/optimize-boot.sh" ]; then
     bash "$INSTALL_DIR/scripts/optimize-boot.sh"
 else
-    echo -e "      ${YELLOW}[INFO]${NC} Script optimize-boot.sh non trovato, saltato."
+    echo -e "      ${YELLOW}[INFO]${NC} Script optimize-boot.sh not found, skipping."
 fi
 
 # ------------------------------------------------------------------------------
 # 8. Install & Enable Systemd Services
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[7/8] Installazione e attivazione servizi Systemd...${NC}"
+echo -e "\n${BLUE}[7/8] Installing and enabling Systemd services...${NC}"
 
 cp "$INSTALL_DIR/systemd/"*.service /etc/systemd/system/
 systemctl daemon-reload
@@ -379,9 +382,9 @@ SERVICES=(
 )
 
 for svc in "${SERVICES[@]}"; do
-    echo -n "      Abilitazione $svc... "
+    echo -n "      Enabling $svc... "
     systemctl enable "$svc" >/dev/null 2>&1 || true
-    echo -e "${GREEN}ABILITATO${NC}"
+    echo -e "${GREEN}ENABLED${NC}"
 done
 
 # Start background services immediately (do not fail if GUI cannot launch in headless SSH session)
@@ -393,21 +396,21 @@ systemctl restart thinclient-vnc.service 2>/dev/null || true
 # 9. Installation Complete Summary
 # ------------------------------------------------------------------------------
 echo -e "\n${CYAN}${BOLD}==============================================================================${NC}"
-echo -e "${GREEN}${BOLD}       INSTALLAZIONE DI HIDATHIN COMPLETATA CON SUCCESSO!       ${NC}"
+echo -e "${GREEN}${BOLD}       HIDATHIN INSTALLATION COMPLETED SUCCESSFULLY!       ${NC}"
 echo -e "${CYAN}${BOLD}==============================================================================${NC}\n"
 
-echo -e "Stato componenti installati:"
-echo -e "  • Percorso installazione: ${BOLD}${INSTALL_DIR}${NC}"
-echo -e "  • Backend Flask Web Service: ${GREEN}Attivo${NC} (porta 8080)"
-echo -e "  • Graphical Kiosk UI: ${GREEN}Configurato${NC} (TTY1 / DISPLAY :0)"
-echo -e "  • Remote Assistance (VNC): ${GREEN}Configurato${NC} (porta 5900, Tailscale-only)"
-echo -e "  • CPU Governor: ${GREEN}Performance${NC} (bassa latenza)"
-echo -e "  • Mouse Polling / Flat: ${GREEN}500 Hz / Profilo Lineare 1:1${NC}"
+echo -e "Installed component status:"
+echo -e "  • Installation directory: ${BOLD}${INSTALL_DIR}${NC}"
+echo -e "  • Flask Web Service Backend: ${GREEN}Active${NC} (port 8080)"
+echo -e "  • Graphical Kiosk UI: ${GREEN}Configured${NC} (TTY1 / DISPLAY :0)"
+echo -e "  • Remote Assistance (VNC): ${GREEN}Configured${NC} (port 5900, Tailscale-only)"
+echo -e "  • CPU Governor: ${GREEN}Performance${NC} (low latency)"
+echo -e "  • Mouse Polling / Flat: ${GREEN}500 Hz / 1:1 Linear Profile${NC}"
 
-echo -e "\n${BOLD}Prossimi passi consigliati:${NC}"
-echo -e "  1. Autentica il Raspberry Pi su Tailscale con:"
+echo -e "\n${BOLD}Recommended next steps:${NC}"
+echo -e "  1. Authenticate the Raspberry Pi on Tailscale:"
 echo -e "     ${BOLD}sudo tailscale up --accept-routes${NC}"
-echo -e "  2. Riavvia per applicare tutte le modifiche del kernel e avviare la GUI Kiosk:"
+echo -e "  2. Reboot to apply all kernel changes and start the Kiosk GUI:"
 echo -e "     ${BOLD}sudo reboot${NC}"
-echo -e "  3. (Opzionale) Configura il filesystem in sola lettura contro lo spegnimento brutale:"
+echo -e "  3. (Optional) Configure Read-Only root filesystem against power cutoffs:"
 echo -e "     ${BOLD}sudo bash /opt/thinclient/scripts/setup-readonly-fs.sh${NC}\n"

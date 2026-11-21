@@ -1,9 +1,9 @@
 version: 1
-rdp_client: "hidathin-rdp"   # hidathin-rdp (Consigliato - Zero-Copy WTware) | xfreerdp3 (Standard FreeRDP)
+rdp_client: "hidathin-rdp"   # hidathin-rdp (Recommended - Zero-Copy WTware) | xfreerdp3 (Standard FreeRDP)
 profile: "balanced"       # performance | balanced | quality
 resolution: "auto"        # auto | 1920x1080 | 1600x900 | 1280x720
 overscan: "none"          # none (1:1 Pixel-Perfect) | auto | light (~2.5%) | medium (~5%) | heavy (~7.5%)
-color_depth: 32           # 16 | 24 | 32 (32 consigliato per ClearType)
+color_depth: 32           # 16 | 24 | 32 (32 recommended for ClearType)
 sound: true               # true | false
 auto_reconnect: true      # true | false
 max_reconnect_retries: 3
@@ -15,8 +15,8 @@ vnc:
 web_admin:
   bind: "127.0.0.1"        # 127.0.0.1 (local only) | 0.0.0.0
   port: 8080
-  remote_enabled: false    # Se true, richiede autenticazione amministrativa
-  admin_token: ""          # Token per API amministrative remote
+  remote_enabled: false    # If true, requires administrative authentication
+  admin_token: ""          # Secret token for remote administrative APIs
 startup:
   mode: "dashboard"        # dashboard | direct_rdp
   connect_timeout_seconds: 20
@@ -24,4 +24,4 @@ startup:
   fallback_to_dashboard: true
   splash_min_duration_seconds: 2
 ui:
-  mode: "native"           # native (Launcher Nativo Tkinter) | chromium (Legacy Kiosk)
+  mode: "native"           # native (Native Tkinter Launcher) | chromium (Legacy Kiosk)
