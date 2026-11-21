@@ -1,5 +1,12 @@
 // Global Thin Client App JS
 
+function tr(key, fallback) {
+    if (window.I18N && window.I18N[key] !== undefined) {
+        return window.I18N[key];
+    }
+    return fallback !== undefined ? fallback : key;
+}
+
 function updateGlobalStatus() {
     fetch('/api/status')
     .then(r => r.json())
@@ -23,7 +30,7 @@ function updateGlobalStatus() {
                 wifiText.innerText = `Ethernet`;
             } else {
                 wifiBadge.className = 'status-badge badge-disconnected';
-                wifiText.innerText = `Disconnesso`;
+                wifiText.innerText = tr('badge_disconnected', 'Disconnesso');
             }
         }
 
@@ -31,15 +38,15 @@ function updateGlobalStatus() {
             if (wf.connected) {
                 cardWifiVal.innerText = wf.ssid;
                 cardWifiVal.style.color = "#4ade80";
-                cardWifiSub.innerText = `Segnale: ${wf.signal}% | IP: ${wf.ip || '--'}`;
+                cardWifiSub.innerText = `${tr('status_signal', 'Segnale:')} ${wf.signal}% | IP: ${wf.ip || '--'}`;
             } else if (eth.connected) {
                 cardWifiVal.innerText = "Ethernet";
                 cardWifiVal.style.color = "#4ade80";
                 cardWifiSub.innerText = `IP: ${eth.ip || '--'}`;
             } else {
-                cardWifiVal.innerText = "Disconnesso";
+                cardWifiVal.innerText = tr('badge_disconnected', 'Disconnesso');
                 cardWifiVal.style.color = "#f87171";
-                cardWifiSub.innerText = "Nessuna rete locale";
+                cardWifiSub.innerText = tr('status_no_local_net', 'Nessuna rete locale');
             }
         }
 
@@ -53,22 +60,22 @@ function updateGlobalStatus() {
         if (tsBadge && tsText) {
             if (ts.connected) {
                 tsBadge.className = 'status-badge badge-connected';
-                tsText.innerText = `Connesso`;
+                tsText.innerText = tr('badge_connected', 'Connesso');
             } else {
                 tsBadge.className = 'status-badge badge-disconnected';
-                tsText.innerText = `Non Connesso`;
+                tsText.innerText = tr('status_disconnected_caps', 'Non Connesso');
             }
         }
 
         if (cardTsVal) {
             if (ts.connected) {
-                cardTsVal.innerText = "CONNESSO";
+                cardTsVal.innerText = tr('status_connected_caps', 'CONNESSO');
                 cardTsVal.style.color = "#4ade80";
                 cardTsSub.innerText = `IP: ${ts.ip || '--'}`;
             } else {
-                cardTsVal.innerText = "NON CONNESSO";
+                cardTsVal.innerText = tr('status_disconnected_caps', 'NON CONNESSO');
                 cardTsVal.style.color = "#f87171";
-                cardTsSub.innerText = "Verificare connessione";
+                cardTsSub.innerText = tr('status_check_conn', 'Verificare connessione');
             }
         }
 
@@ -77,7 +84,7 @@ function updateGlobalStatus() {
         if (footerInfo) {
             const primaryIp = data.network?.primary_ip || '--';
             const tsIp = ts.ip || '--';
-            footerInfo.innerText = `IP Locale: ${primaryIp} | Tailscale IP: ${tsIp}`;
+            footerInfo.innerText = `${tr('local_ip', 'IP Locale')}: ${primaryIp} | ${tr('ts_ip', 'Tailscale IP')}: ${tsIp}`;
         }
 
         const footerVersion = document.getElementById('footer-version');

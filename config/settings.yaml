@@ -1,4 +1,5 @@
 version: 1
+language: "it"              # it (Italiano) | en (English)
 rdp_client: "hidathin-rdp"   # hidathin-rdp (Recommended - Zero-Copy WTware) | xfreerdp3 (Standard FreeRDP)
 profile: "balanced"       # performance | balanced | quality
 resolution: "auto"        # auto | 1920x1080 | 1600x900 | 1280x720

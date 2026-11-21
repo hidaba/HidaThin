@@ -8,10 +8,12 @@ import socket
 import logging
 import time
 import threading
+import json
 import yaml
 from flask import Flask, render_template, request, jsonify
 
 from app import __version__
+from app.i18n import t, get_translations, get_current_language
 from app.wifi import get_network_status, scan_wifi_networks, connect_wifi, forget_wifi
 from app.tailscale import (
     get_tailscale_status, set_tailscale_enabled, connect_tailscale,
@@ -41,8 +43,13 @@ app = Flask(
 
 @app.context_processor
 def inject_globals():
+    settings = get_settings()
+    lang = settings.get("language", "it")
     return {
-        "app_version": __version__
+        "app_version": __version__,
+        "current_lang": lang,
+        "t": lambda key, **kw: t(key, lang=lang, **kw),
+        "translations_json": json.dumps(get_translations(lang))
     }
 
 def load_hosts_data(include_passwords=False):

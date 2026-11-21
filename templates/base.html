@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it" translate="no" class="notranslate">
+<html lang="{{ current_lang }}" translate="no" class="notranslate">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -15,13 +15,13 @@
             </div>
             <div class="header-badges">
                 <div id="badge-wifi" class="status-badge badge-pending">
-                    <span class="badge-dot">●</span> Wi-Fi: <span id="wifi-status-text">Verifica...</span>
+                    <span class="badge-dot">●</span> Wi-Fi: <span id="wifi-status-text">{{ t('badge_checking') }}</span>
                 </div>
                 <div id="badge-tailscale" class="status-badge badge-pending">
-                    <span class="badge-dot">●</span> Tailscale: <span id="tailscale-status-text">Verifica...</span>
+                    <span class="badge-dot">●</span> Tailscale: <span id="tailscale-status-text">{{ t('badge_checking') }}</span>
                 </div>
                 <div id="badge-vnc" class="status-badge badge-connected" style="display: none; background: rgba(37, 99, 235, 0.2); border-color: #3b82f6; color: #93c5fd;">
-                    <span class="badge-dot">●</span> <span>Assistenza Remota Attiva</span>
+                    <span class="badge-dot">●</span> <span>{{ t('badge_vnc_active') }}</span>
                 </div>
             </div>
         </header>
@@ -32,16 +32,16 @@
 
         <footer class="app-footer">
             <div class="footer-info">
-                <span id="system-info-text">IP Locale: -- | Tailscale IP: --</span>
+                <span id="system-info-text">{{ t('local_ip') }}: -- | {{ t('ts_ip') }}: --</span>
                 <span class="footer-divider">•</span>
                 <span class="footer-version" id="footer-version">v{{ app_version or '0.2.19' }}</span>
             </div>
             <div class="footer-actions">
-                <a href="/" class="btn-nav">Home</a>
-                <a href="/wifi" class="btn-nav">Wi-Fi</a>
-                <a href="/hosts" class="btn-nav">Gestisci PC</a>
-                <a href="/diagnostics" class="btn-nav">Diagnostica</a>
-                <a href="/settings" class="btn-nav">⚙ Impostazioni</a>
+                <a href="/" class="btn-nav">{{ t('nav_home') }}</a>
+                <a href="/wifi" class="btn-nav">{{ t('nav_wifi') }}</a>
+                <a href="/hosts" class="btn-nav">{{ t('nav_hosts') }}</a>
+                <a href="/diagnostics" class="btn-nav">{{ t('nav_diagnostics') }}</a>
+                <a href="/settings" class="btn-nav">{{ t('nav_settings') }}</a>
             </div>
         </footer>
     </div>
@@ -49,14 +49,18 @@
     <!-- Modal for notifications/errors -->
     <div id="app-modal" class="modal-backdrop" style="display: none;">
         <div class="modal-box">
-            <h3 id="modal-title">Avviso</h3>
+            <h3 id="modal-title">{{ t('modal_notice') }}</h3>
             <p id="modal-message"></p>
             <div class="modal-buttons" id="modal-buttons">
-                <button class="btn btn-primary" onclick="closeModal()">Chiudi</button>
+                <button class="btn btn-primary" onclick="closeModal()">{{ t('modal_close') }}</button>
             </div>
         </div>
     </div>
 
+    <script>
+        window.I18N = {{ translations_json|safe }};
+        window.CURRENT_LANG = "{{ current_lang }}";
+    </script>
     <script src="/static/js/app.js"></script>
     {% block scripts %}{% endblock %}
 </body>

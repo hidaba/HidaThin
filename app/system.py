@@ -15,6 +15,7 @@ SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.yaml")
 
 DEFAULT_SETTINGS = {
     "version": 1,
+    "language": "it",                 # it (Italiano) | en (English)
     "rdp_client": "hidathin-rdp",      # hidathin-rdp (Consigliato - Zero-Copy WTware) | xfreerdp3 (Standard FreeRDP)
     "profile": "balanced",
     "resolution": "auto",
@@ -56,6 +57,7 @@ VALID_COLOR_DEPTHS = {16, 24, 32}
 VALID_STARTUP_MODES = {"dashboard", "direct_rdp"}
 VALID_OVERSCAN_MODES = {"none", "auto", "light", "medium", "heavy"}
 VALID_UI_MODES = {"native", "chromium"}
+VALID_LANGUAGES = {"it", "en"}
 
 OVERSCAN_PCT = {
     "none": 0.0,
@@ -86,6 +88,9 @@ def validate_settings(settings):
     """Validates settings against the expected schema."""
     if not isinstance(settings, dict):
         return False, "La configurazione deve essere un oggetto."
+
+    if "language" in settings and settings["language"] not in VALID_LANGUAGES:
+        return False, f"Lingua non valida: {settings['language']}. Valori ammessi: {', '.join(sorted(VALID_LANGUAGES))}"
 
     if "rdp_client" in settings and settings["rdp_client"] not in VALID_RDP_CLIENTS:
         return False, f"Client RDP non valido: {settings['rdp_client']}. Valori ammessi: {', '.join(sorted(VALID_RDP_CLIENTS))}"
