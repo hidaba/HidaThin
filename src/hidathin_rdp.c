@@ -89,6 +89,7 @@ typedef struct
 	int depth;
 	int x11_fd;
 	Atom wm_delete_window;
+	Atom wm_take_focus;
 
 	BOOL use_shm;
 	XShmSegmentInfo shminfo;
@@ -452,6 +453,50 @@ static void set_fullscreen_ewmh(Display* dpy, Window win)
 	           SubstructureRedirectMask | SubstructureNotifyMask, &xev);
 }
 
+static void set_active_window_ewmh(Display* dpy, Window win)
+{
+	Atom wm_active = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
+	XEvent xev;
+	memset(&xev, 0, sizeof(xev));
+	xev.type = ClientMessage;
+	xev.xclient.window = win;
+	xev.xclient.message_type = wm_active;
+	xev.xclient.format = 32;
+	xev.xclient.data.l[0] = 1; /* source: 1 = application */
+	xev.xclient.data.l[1] = CurrentTime;
+	xev.xclient.data.l[2] = 0;
+	XSendEvent(dpy, DefaultRootWindow(dpy), False,
+	           SubstructureRedirectMask | SubstructureNotifyMask, &xev);
+}
+
+static int hida_x_error_handler(Display* dpy, XErrorEvent* event)
+{
+	/* Ignore harmless/expected asynchronous X11 errors (e.g. BadMatch on opcode 42 X_SetInputFocus when window is transitioning) */
+	if (event->error_code == BadMatch && event->request_code == 42)
+		return 0;
+	if (event->error_code == BadWindow || event->error_code == BadDrawable)
+		return 0;
+
+	char msg[128] = { 0 };
+	XGetErrorText(dpy, event->error_code, msg, sizeof(msg));
+	fprintf(stderr, "[hidathin-rdp] Ignored X11 error: %s (opcode %d, resource 0x%lx)\n",
+	        msg, event->request_code, (unsigned long)event->resourceid);
+	return 0;
+}
+
+static void hida_set_input_focus_safe(HidaRdpContext* hctx)
+{
+	if (!hctx || !hctx->display || !hctx->window)
+		return;
+
+	XWindowAttributes attrs;
+	if (XGetWindowAttributes(hctx->display, hctx->window, &attrs) && attrs.map_state == IsViewable)
+	{
+		XSetInputFocus(hctx->display, hctx->window, RevertToParent, CurrentTime);
+		XFlush(hctx->display);
+	}
+}
+
 static Cursor create_null_cursor(Display* dpy, Window root)
 {
 	Pixmap bm = XCreateBitmapFromData(dpy, root, "\0", 1, 1);
@@ -536,6 +581,9 @@ static BOOL hida_pre_connect(freerdp* instance)
 
 	HidaRdpContext* hctx = (HidaRdpContext*)instance->context;
 	rdpSettings* settings = instance->context->settings;
+
+	/* Set custom X11 error handler to ignore non-fatal race conditions */
+	XSetErrorHandler(hida_x_error_handler);
 
 	/* Open X11 Display early to detect native monitor resolution */
 	hctx->display = XOpenDisplay(NULL);
@@ -638,7 +686,20 @@ static BOOL hida_post_connect(freerdp* instance)
 
 	XStoreName(hctx->display, hctx->window, "HidaThin RDP");
 	hctx->wm_delete_window = XInternAtom(hctx->display, "WM_DELETE_WINDOW", False);
-	XSetWMProtocols(hctx->display, hctx->window, &hctx->wm_delete_window, 1);
+	hctx->wm_take_focus = XInternAtom(hctx->display, "WM_TAKE_FOCUS", False);
+	Atom protocols[2] = { hctx->wm_delete_window, hctx->wm_take_focus };
+	XSetWMProtocols(hctx->display, hctx->window, protocols, 2);
+
+	/* Declare ICCCM window manager hints (InputHint=True tells Openbox to focus upon map) */
+	XWMHints* hints = XAllocWMHints();
+	if (hints)
+	{
+		hints->flags = InputHint | StateHint;
+		hints->input = True;
+		hints->initial_state = NormalState;
+		XSetWMHints(hctx->display, hctx->window, hints);
+		XFree(hints);
+	}
 
 	if (fullscreen)
 		set_fullscreen_ewmh(hctx->display, hctx->window);
@@ -653,7 +714,8 @@ static BOOL hida_post_connect(freerdp* instance)
 	XMapRaised(hctx->display, hctx->window);
 	if (fullscreen)
 		set_fullscreen_ewmh(hctx->display, hctx->window);
-	XSetInputFocus(hctx->display, hctx->window, RevertToParent, CurrentTime);
+	set_active_window_ewmh(hctx->display, hctx->window);
+	hida_set_input_focus_safe(hctx);
 	XFlush(hctx->display);
 
 	/* 4. Register hardware pointer & dirtybuf callbacks */
@@ -736,6 +798,12 @@ static void process_x11_events(freerdp* instance, HidaRdpContext* hctx)
 
 		switch (ev.type)
 		{
+			case MapNotify:
+			{
+				hida_set_input_focus_safe(hctx);
+				break;
+			}
+
 			case MotionNotify:
 			{
 				/* WTware Motion Coalescing: collapse all consecutive MotionNotify events in queue */
@@ -768,6 +836,9 @@ static void process_x11_events(freerdp* instance, HidaRdpContext* hctx)
 			case ButtonPress:
 			case ButtonRelease:
 			{
+				if (ev.type == ButtonPress)
+					hida_set_input_focus_safe(hctx);
+
 				BOOL down = (ev.type == ButtonPress);
 				UINT16 x = (UINT16)((ev.xbutton.x < 0) ? 0 : ev.xbutton.x);
 				UINT16 y = (UINT16)((ev.xbutton.y < 0) ? 0 : ev.xbutton.y);
@@ -829,7 +900,17 @@ static void process_x11_events(freerdp* instance, HidaRdpContext* hctx)
 			case ClientMessage:
 			{
 				if ((Atom)ev.xclient.data.l[0] == hctx->wm_delete_window)
+				{
 					g_terminate = 1;
+				}
+				else if ((Atom)ev.xclient.data.l[0] == hctx->wm_take_focus)
+				{
+					XWindowAttributes attrs;
+					if (XGetWindowAttributes(dpy, hctx->window, &attrs) && attrs.map_state == IsViewable)
+					{
+						XSetInputFocus(dpy, hctx->window, RevertToParent, (Time)ev.xclient.data.l[1]);
+					}
+				}
 				break;
 			}
 
@@ -941,6 +1022,7 @@ int main(int argc, char* argv[])
 	signal(SIGINT, handle_signal);
 	signal(SIGTERM, handle_signal);
 	signal(SIGPIPE, SIG_IGN);
+	XSetErrorHandler(hida_x_error_handler);
 
 	RDP_CLIENT_ENTRY_POINTS clientEntryPoints;
 	memset(&clientEntryPoints, 0, sizeof(clientEntryPoints));

@@ -5,6 +5,18 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.29] - 2026-11-21
+
+### Risolto
+- **Risoluzione Crash BadMatch su X_SetInputFocus in `hidathin-rdp` (`src/hidathin_rdp.c`)**:
+  - Identificata e risolta la causa esatta del crash del client C nativo: la chiamata sincrona a `XSetInputFocus(..., CurrentTime)` avveniva immediatamente dopo `XMapRaised()`, prima che il window manager (Openbox) avesse completato l'elaborazione dell'evento `MapRequest` e reso la finestra effettivamente `IsViewable`. Nel protocollo X11 (richiesta opcode 42 `X_SetInputFocus`), impostare il focus su una finestra non ancora viewable genera l'errore `BadMatch`, causando la chiusura forzata immediata del processo dal gestore di errore predefinito di Xlib (`_XDefaultError`).
+  - Introdotto `hida_x_error_handler` (`XSetErrorHandler`) per intercettare e gestire silenziosamente errori X11 asincroni non critici (inclusi `BadMatch` su opcode 42, `BadWindow` e `BadDrawable`).
+  - Introdotta la funzione `hida_set_input_focus_safe()` che interroga gli attributi della finestra con `XGetWindowAttributes()` e imposta il focus solo se lo stato è `IsViewable`.
+  - Dichiarati gli hint conformi ICCCM (`XWMHints` con `hints->input = True` e `NormalState`) e inviato il messaggio client EWMH `_NET_ACTIVE_WINDOW` per demandare a Openbox l'attivazione nativa della finestra al mapping.
+  - Aggiunto il protocollo ICCCM `WM_TAKE_FOCUS` in `WM_PROTOCOLS` e gestiti gli eventi `MapNotify`, `ButtonPress` e `ClientMessage (WM_TAKE_FOCUS)` nel loop `process_x11_events` per agganciare il focus non appena la finestra diventa visibile o cliccata.
+  - Ripristinata la compilazione e installazione automatica di `hidathin-rdp` in `install.sh` e `scripts/deploy-thinclient.ps1`, e reintrodotta la priorità in `_find_freerdp_binary()` in `app/rdp.py` con fallback garantito a `xfreerdp3`.
+  - Aggiornati i test automatici in `tests/test_rdp_lifecycle.py`.
+
 ## [0.2.28] - 2026-11-21
 
 ### Risolto

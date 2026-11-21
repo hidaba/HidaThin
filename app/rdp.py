@@ -224,7 +224,7 @@ class RDPManager:
             }
 
     def _find_freerdp_binary(self):
-        for candidate in ["xfreerdp3", "xfreerdp"]:
+        for candidate in ["hidathin-rdp", "/usr/local/bin/hidathin-rdp", "/opt/thinclient/src/hidathin-rdp", "xfreerdp3", "xfreerdp"]:
             path = shutil.which(candidate)
             if path:
                 return path

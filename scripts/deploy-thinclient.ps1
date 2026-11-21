@@ -34,7 +34,10 @@ tar -xzf /tmp/thinclient-update.tar.gz -C /opt/thinclient
 rm -f /tmp/thinclient-update.tar.gz
 find /opt/thinclient -path /opt/thinclient/config -prune -o -path "*/__pycache__*" -prune -o -type f \( -name "*.sh" -o -name "xinitrc" -o -name "*.py" -o -name "*.service" -o -name "*.html" -o -name "*.yaml" -o -name "*.css" -o -name "*.js" -o -name "Makefile" -o -name "*.c" \) -exec sed -i 's/\r$//' {} + 2>/dev/null || true
 chmod +x /opt/thinclient/scripts/* /opt/thinclient/app/*.py 2>/dev/null || true
-rm -f /usr/local/bin/hidathin-rdp
+if [ -d /opt/thinclient/src ] && command -v make >/dev/null 2>&1; then
+    echo "Compilazione client nativo hidathin-rdp..."
+    make -C /opt/thinclient/src clean && make -C /opt/thinclient/src && make -C /opt/thinclient/src install || echo "[WARN] Compilazione hidathin-rdp non riuscita, mantenuto fallback xfreerdp3."
+fi
 sync
 echo "Aggiornamento applicato con successo su /opt/thinclient."
 '@.Replace("`r`n", "`n")
