@@ -15,6 +15,7 @@ SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.yaml")
 
 DEFAULT_SETTINGS = {
     "version": 1,
+    "rdp_client": "hidathin-rdp",      # hidathin-rdp (Consigliato - Zero-Copy WTware) | xfreerdp3 (Standard FreeRDP)
     "profile": "balanced",
     "resolution": "auto",
     "overscan": "none",
@@ -46,6 +47,7 @@ DEFAULT_SETTINGS = {
     }
 }
 
+VALID_RDP_CLIENTS = {"hidathin-rdp", "xfreerdp3"}
 VALID_PROFILES = {"performance", "balanced", "quality"}
 VALID_COLOR_DEPTHS = {16, 24, 32}
 VALID_STARTUP_MODES = {"dashboard", "direct_rdp"}
@@ -81,6 +83,9 @@ def validate_settings(settings):
     """Validates settings against the expected schema."""
     if not isinstance(settings, dict):
         return False, "La configurazione deve essere un oggetto."
+
+    if "rdp_client" in settings and settings["rdp_client"] not in VALID_RDP_CLIENTS:
+        return False, f"Client RDP non valido: {settings['rdp_client']}. Valori ammessi: {', '.join(sorted(VALID_RDP_CLIENTS))}"
 
     if "overscan" in settings and settings["overscan"] not in VALID_OVERSCAN_MODES:
         return False, f"Modalità overscan non valida: {settings['overscan']}. Valori ammessi: {', '.join(sorted(VALID_OVERSCAN_MODES))}"

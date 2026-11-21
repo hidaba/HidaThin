@@ -1,4 +1,5 @@
 version: 1
+rdp_client: "hidathin-rdp"   # hidathin-rdp (Consigliato - Zero-Copy WTware) | xfreerdp3 (Standard FreeRDP)
 profile: "balanced"       # performance | balanced | quality
 resolution: "auto"        # auto | 1920x1080 | 1600x900 | 1280x720
 overscan: "none"          # none (1:1 Pixel-Perfect) | auto | light (~2.5%) | medium (~5%) | heavy (~7.5%)

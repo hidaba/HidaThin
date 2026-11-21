@@ -5,6 +5,18 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.30] - 2026-11-21
+
+### Aggiunto
+- **Selezione Programma RDP Preferito nelle Impostazioni (`config/settings.yaml`, `app/system.py`, `app/rdp.py`, `app/launcher.py`, `templates/settings.html`)**:
+  - Impostato `hidathin-rdp` come client RDP predefinito per il sistema, garantendo le prestazioni massime del rendering nativo Zero-Copy WTware su Raspberry Pi.
+  - Aggiunto il parametro di configurazione `rdp_client` (`hidathin-rdp` | `xfreerdp3`) in `DEFAULT_SETTINGS` e in `config/settings.yaml` con validazione rigorosa dello schema (`VALID_RDP_CLIENTS`).
+  - Aggiornato `app/rdp.py`: `_find_freerdp_binary(preferred_client)` seleziona dinamicamente il programma prescelto mantenendo il fallback reciproco qualora uno dei binari non fosse presente.
+  - Aggiornata la finestra delle impostazioni del Launcher nativo Tkinter (`open_settings_dialog` in `app/launcher.py`): aggiunto il selettore a tendina *Programma Client RDP* con opzioni `hidathin-rdp` (Consigliato) e `xfreerdp3` (Standard FreeRDP 3.x), salvataggio e applicazione istantanea via API.
+  - Aggiornata la pagina web di amministrazione [templates/settings.html](file:///y:/Progetti/thinclient/templates/settings.html): aggiunto il menu di selezione del client RDP con descrizione dettagliata delle due modalità.
+  - Aggiornato [install.sh](file:///y:/Progetti/thinclient/install.sh) con il nuovo default `rdp_client: "hidathin-rdp"`.
+  - Aggiunti i test automatici di validazione schema e selezione binario in `tests/test_updater_settings.py` e `tests/test_rdp_lifecycle.py`.
+
 ## [0.2.29] - 2026-11-21
 
 ### Risolto

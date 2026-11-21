@@ -263,8 +263,13 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
 
         manager.disconnect()
 
-    # 4. Priority selection of native WTware-style hidathin-rdp binary with fallback to xfreerdp3
+    # 4. Selection of RDP binary based on preferred_client setting
+    # Case A: hidathin-rdp (default) prioritizes hidathin-rdp
     with patch("shutil.which", side_effect=lambda c: "/usr/local/bin/hidathin-rdp" if "hidathin-rdp" in c else "/usr/bin/xfreerdp3"):
-        assert manager._find_freerdp_binary() == "/usr/local/bin/hidathin-rdp"
+        assert manager._find_freerdp_binary(preferred_client="hidathin-rdp") == "/usr/local/bin/hidathin-rdp"
+    # Case B: xfreerdp3 prioritizes xfreerdp3 even if hidathin-rdp exists
+    with patch("shutil.which", side_effect=lambda c: "/usr/local/bin/hidathin-rdp" if "hidathin-rdp" in c else "/usr/bin/xfreerdp3"):
+        assert manager._find_freerdp_binary(preferred_client="xfreerdp3") == "/usr/bin/xfreerdp3"
+    # Case C: Fallback to xfreerdp3 if hidathin-rdp is absent
     with patch("shutil.which", side_effect=lambda c: "/usr/bin/xfreerdp3" if "xfreerdp3" in c else None):
-        assert manager._find_freerdp_binary() == "/usr/bin/xfreerdp3"
+        assert manager._find_freerdp_binary(preferred_client="hidathin-rdp") == "/usr/bin/xfreerdp3"

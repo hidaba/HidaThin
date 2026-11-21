@@ -1324,11 +1324,11 @@ class NativeLauncherApp:
         """Displays interactive video quality / RDP settings and Web Admin remote access URL."""
         dialog = tk.Toplevel(self.root)
         dialog.title("Impostazioni Qualità Video & RDP")
-        dialog.geometry("560x470")
+        dialog.geometry("560x540")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
-        self._center_window(dialog, 560, 470)
+        self._center_window(dialog, 560, 540)
 
         tk.Label(dialog, text="⚙  Qualità Video, Nitidezza Testi & RDP", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 10))
 
@@ -1337,12 +1337,26 @@ class NativeLauncherApp:
             from app.system import get_settings
             cur_settings = get_settings()
         except Exception:
-            cur_settings = {"profile": "balanced", "overscan": "none", "color_depth": 32}
+            cur_settings = {"rdp_client": "hidathin-rdp", "profile": "balanced", "overscan": "none", "color_depth": 32}
 
         form = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
         form.pack(fill=tk.X)
 
-        # 1. RDP Profile
+        # 1. RDP Client Program
+        tk.Label(form, text="Programma Client RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        client_map = [
+            ("hidathin-rdp", "hidathin-rdp (Consigliato - Nativo Zero-Copy WTware ARM64)"),
+            ("xfreerdp3", "xfreerdp3 (Standard FreeRDP 3.x upstream)"),
+        ]
+        client_var = tk.StringVar()
+        client_combo = ttk.Combobox(form, textvariable=client_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        client_combo["values"] = [label for _, label in client_map]
+        cur_client = cur_settings.get("rdp_client", "hidathin-rdp")
+        client_idx = next((i for i, (k, _) in enumerate(client_map) if k == cur_client), 0)
+        client_combo.current(client_idx)
+        client_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
+
+        # 2. RDP Profile
         tk.Label(form, text="Profilo Grafico RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
         profile_map = [
             ("balanced", "Bilanciato (Consigliato - Testi nitidi ClearType Lossless 1:1)"),
@@ -1357,7 +1371,7 @@ class NativeLauncherApp:
         prof_combo.current(prof_idx)
         prof_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
 
-        # 2. Overscan / Pixel Mapping
+        # 3. Overscan / Pixel Mapping
         tk.Label(form, text="Mappatura Pixel Schermo / Overscan TV:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
         overscan_map = [
             ("none", "1:1 Pixel-Perfect (Consigliata - Massima nitidezza caratteri)"),
@@ -1375,7 +1389,7 @@ class NativeLauncherApp:
         over_combo.current(over_idx)
         over_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
 
-        # 3. Color Depth
+        # 4. Color Depth
         tk.Label(form, text="Profondità Colore:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
         bpp_map = [
             (32, "32-bit TrueColor (Consigliato per antialiasing subpixel ClearType)"),
@@ -1401,6 +1415,7 @@ class NativeLauncherApp:
         tk.Label(dialog, text=web_info, font=self.font_status_sub, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD).pack(pady=(0, 10))
 
         def save_and_apply():
+            sel_client = client_map[max(0, client_combo.current())][0]
             sel_prof = profile_map[max(0, prof_combo.current())][0]
             sel_over = overscan_map[max(0, over_combo.current())][0]
             sel_bpp = bpp_map[max(0, bpp_combo.current())][0]
@@ -1408,6 +1423,7 @@ class NativeLauncherApp:
 
             def worker():
                 res = self._api_post("/api/settings/save", {
+                    "rdp_client": sel_client,
                     "profile": sel_prof,
                     "overscan": sel_over,
                     "color_depth": sel_bpp

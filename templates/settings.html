@@ -8,6 +8,21 @@
 
         <form id="settings-form" onsubmit="saveSettingsForm(event)">
             <div class="form-group">
+                <label for="setting-rdp-client"><strong>Programma RDP (Client):</strong></label>
+                <select id="setting-rdp-client" class="input-text">
+                    <option value="hidathin-rdp" {% if not settings.rdp_client or settings.rdp_client == 'hidathin-rdp' %}selected{% endif %}>
+                        hidathin-rdp (Consigliato - Client nativo Zero-Copy WTware, bassissima latenza ARM64)
+                    </option>
+                    <option value="xfreerdp3" {% if settings.rdp_client == 'xfreerdp3' %}selected{% endif %}>
+                        xfreerdp3 (Standard FreeRDP 3.x upstream)
+                    </option>
+                </select>
+                <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
+                    Scegli tra il motore nativo Zero-Copy ottimizzato per Raspberry Pi (senza passaggi intermedi di buffer) e il client FreeRDP 3.15 standard.
+                </small>
+            </div>
+
+            <div class="form-group">
                 <label for="setting-profile"><strong>Profilo RDP:</strong></label>
                 <select id="setting-profile" class="input-text">
                     <option value="performance" {% if settings.profile == 'performance' %}selected{% endif %}>
@@ -240,6 +255,7 @@ function toggleVncFields() {
 function saveSettingsForm(e) {
     e.preventDefault();
     const rdpPayload = {
+        rdp_client: document.getElementById('setting-rdp-client').value,
         profile: document.getElementById('setting-profile').value,
         resolution: document.getElementById('setting-resolution').value,
         overscan: document.getElementById('setting-overscan').value,

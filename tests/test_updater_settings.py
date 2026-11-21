@@ -238,3 +238,23 @@ def test_t29_ui_mode_schema_validation(tmp_path, monkeypatch):
     assert ok_inv is False
     assert "Modalità UI non valida" in msg_inv
 
+
+def test_t31_rdp_client_schema_validation(tmp_path, monkeypatch):
+    """
+    T31: Validazione schema e configurazione per il client RDP preferito (hidathin-rdp vs xfreerdp3).
+    """
+    settings_file = tmp_path / "settings.yaml"
+    monkeypatch.setattr("app.system.SETTINGS_FILE", str(settings_file))
+
+    # Test valid clients
+    for client in ["hidathin-rdp", "xfreerdp3"]:
+        ok, msg = save_settings({"rdp_client": client})
+        assert ok is True
+        assert get_settings()["rdp_client"] == client
+
+    # Test invalid client
+    ok_inv, msg_inv = save_settings({"rdp_client": "unknown-rdp-client"})
+    assert ok_inv is False
+    assert "Client RDP non valido" in msg_inv
+
+

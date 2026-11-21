@@ -223,8 +223,20 @@ class RDPManager:
                 "session_id": None
             }
 
-    def _find_freerdp_binary(self):
-        for candidate in ["hidathin-rdp", "/usr/local/bin/hidathin-rdp", "/opt/thinclient/src/hidathin-rdp", "xfreerdp3", "xfreerdp"]:
+    def _find_freerdp_binary(self, preferred_client=None):
+        if not preferred_client:
+            try:
+                settings = get_settings()
+                preferred_client = settings.get("rdp_client", "hidathin-rdp")
+            except Exception:
+                preferred_client = "hidathin-rdp"
+
+        if preferred_client == "xfreerdp3":
+            order = ["xfreerdp3", "xfreerdp", "hidathin-rdp", "/usr/local/bin/hidathin-rdp", "/opt/thinclient/src/hidathin-rdp"]
+        else:
+            order = ["hidathin-rdp", "/usr/local/bin/hidathin-rdp", "/opt/thinclient/src/hidathin-rdp", "xfreerdp3", "xfreerdp"]
+
+        for candidate in order:
             path = shutil.which(candidate)
             if path:
                 return path
@@ -242,15 +254,16 @@ class RDPManager:
                 if self.active_session.process.poll() is None:
                     return False, "Una sessione RDP è già attiva."
 
-            bin_path = self._find_freerdp_binary()
+            settings = get_settings()
+            preferred_client = settings.get("rdp_client", "hidathin-rdp")
+            bin_path = self._find_freerdp_binary(preferred_client)
             if not bin_path:
-                self.last_error = "FreeRDP (xfreerdp3 / xfreerdp) non trovato nel sistema."
+                self.last_error = f"Client RDP ({preferred_client} / xfreerdp3) non trovato nel sistema."
                 return False, self.last_error
 
             self.session_counter += 1
             session_id = self.session_counter
-
-            settings = get_settings()
+            logger.info(f"Avvio sessione RDP con client '{os.path.basename(bin_path)}' ({bin_path}) [impostazione: {preferred_client}]")
             profile = settings.get("profile", "balanced")
             color_depth = str(settings.get("color_depth", 32))
             # 32-bit color depth is required for full ClearType font smoothing and subpixel antialiasing
