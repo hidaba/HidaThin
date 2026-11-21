@@ -263,6 +263,6 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
 
         manager.disconnect()
 
-    # 4. Priority selection of native WTware-style hidathin-rdp binary when available
-    with patch("shutil.which", side_effect=lambda c: "/usr/local/bin/hidathin-rdp" if "hidathin-rdp" in c else "/usr/bin/xfreerdp3"):
-        assert manager._find_freerdp_binary() == "/usr/local/bin/hidathin-rdp"
+    # 4. Priority selection of upstream FreeRDP binary (xfreerdp3)
+    with patch("shutil.which", side_effect=lambda c: "/usr/bin/xfreerdp3" if "xfreerdp3" in c else None):
+        assert manager._find_freerdp_binary() == "/usr/bin/xfreerdp3"

@@ -5,6 +5,23 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.28] - 2026-11-21
+
+### Risolto
+- **Risoluzione Falso Positivo "Password Errata" (`app/rdp.py`)**:
+  - Rimossi i termini generici non qualificati (`credentials`, `credential`, `credenziali`, `nla`, `logon`) da `AUTH_ERROR_KEYWORDS`. Il log di FreeRDP contiene regolarmente stringhe come `kerberos_AcquireCredentialsHandleA` (durante il fallback NTLM per account locali Windows) e `CONNECTION_STATE_NLA`: in precedenza, qualsiasi terminazione o errore veniva erroneamente classificata come errore di password (`auth_error=True`), inducendo il launcher a richiedere nuovamente le credenziali anche se corrette.
+  - Sostituiti con stringhe e codici diagnostici precisi (`ERRCONNECT_LOGON_FAILURE`, `ERRCONNECT_AUTHENTICATION_FAILED`, `ERRCONNECT_ACCOUNT_DISABLED`, `ERRCONNECT_PASSWORD_EXPIRED`, `STATUS_LOGON_FAILURE`, `SEC_E_LOGON_DENIED`, `invalid credentials`, `credenziali errate`, `password errati`, `0x00020014`, `154`).
+
+- **Stabilità Connessione RDP e Ripristino Priorità `xfreerdp3` (`app/rdp.py`, `scripts/deploy-thinclient.ps1`, `install.sh`)**:
+  - Ripristinato `xfreerdp3` come client principale in `_find_freerdp_binary()`. Il client sperimentale C `hidathin-rdp` generava un crash `BadMatch` su `X_SetInputFocus` (richiesta opcode 42) all'aggancio del display X11 in fullscreen con finestra non ancora viewable.
+  - Rimossa l'installazione forzata di `hidathin-rdp` garantendo la massima affidabilità e stabilità operativa con FreeRDP 3.15 upstream.
+
+- **Eliminazione Schermo Nero Prematuro all'Avvio Sessione (`app/launcher.py`)**:
+  - Il launcher Tkinter non nasconde più la finestra (`self.root.withdraw()`) prima che la connessione RDP sia effettivamente stabilita. L'overlay con lo stato di connessione e il tasto *Annulla* rimane visibile a schermo durante l'handshake e la risoluzione NLA/DNS; la finestra principale viene nascosta solo quando lo stato transiziona a `CONNECTED`. In caso di errore o rifiuto, il launcher ripristina la card o apre il dialog senza transizioni a schermo nero (che simulavano un riavvio del thin client).
+
+- **Correzione Configurazione Host `pc-officina` (`config/hosts.yaml`)**:
+  - Verificato e ripristinato l'username locale corretto `hidab` per `pc-officina` (invece di `hidaba@hidaba.it` che innescava lookup DNS Kerberos e fallimento NLA `ERRCONNECT_LOGON_FAILURE`).
+
 ## [0.2.27] - 2026-11-21
 
 ### Risolto

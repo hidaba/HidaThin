@@ -87,13 +87,10 @@ def test_rdp_connect_flow_and_window_withdraw(launcher_instance):
     app = launcher_instance
     app.hosts_data = {"pc-mimmo": {"name": "PC Mimmo", "has_password": True}}
 
-    with patch.object(app, "_start_rdp_session_monitor") as mock_monitor, \
-         patch.object(app.root, "withdraw") as mock_withdraw:
-
+    with patch.object(app, "_start_rdp_session_monitor") as mock_monitor:
         app._handle_connect_result({"success": True}, "PC Mimmo")
 
         assert app.is_connected_rdp is True
-        mock_withdraw.assert_called_once()
         mock_monitor.assert_called_once_with("PC Mimmo")
 
 def test_rdp_session_end_restores_window(launcher_instance):

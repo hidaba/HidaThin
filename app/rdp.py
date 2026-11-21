@@ -35,22 +35,25 @@ AUTH_ERROR_KEYWORDS = [
     "Autenticazione NLA",
     "ERRCONNECT_LOGON_FAILURE",
     "ERRCONNECT_AUTHENTICATION_FAILED",
+    "ERRCONNECT_ACCOUNT_DISABLED",
+    "ERRCONNECT_PASSWORD_EXPIRED",
+    "ERRCONNECT_PASSWORD_MUST_CHANGE",
     "STATUS_LOGON_FAILURE",
+    "SEC_E_LOGON_DENIED",
     "check credentials",
+    "invalid credentials",
+    "credenziali non valide",
+    "credenziali errate",
     "password errati",
     "password Windows errata",
     "password scaduta",
     "0x00020009",
+    "0x00020012",
     "0x00020014",
     "0x00020015",
-    "SEC_E_LOGON_DENIED",
+    "0x00020016",
     "missing username",
     "missing password",
-    "credentials",
-    "credential",
-    "credenziali",
-    "nla",
-    "logon",
     "login failed",
     "failed to authenticate",
     "auth error",
@@ -221,7 +224,7 @@ class RDPManager:
             }
 
     def _find_freerdp_binary(self):
-        for candidate in ["hidathin-rdp", "/usr/local/bin/hidathin-rdp", "/opt/thinclient/src/hidathin-rdp", "xfreerdp3", "xfreerdp"]:
+        for candidate in ["xfreerdp3", "xfreerdp"]:
             path = shutil.which(candidate)
             if path:
                 return path

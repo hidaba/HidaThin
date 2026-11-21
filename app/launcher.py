@@ -952,9 +952,8 @@ class NativeLauncherApp:
                 messagebox.showerror("Errore Connessione RDP", f"Impossibile connettersi a {host_name}:\n{err_msg}")
             return
 
-        # Hide window for FreeRDP fullscreen
+        # Session connecting in background: keep overlay active, do not withdraw launcher prematurely
         self.is_connected_rdp = True
-        self.root.withdraw()
         self._start_rdp_session_monitor(host_name)
 
     def cancel_active_connection(self):
@@ -963,14 +962,18 @@ class NativeLauncherApp:
 
     def _start_rdp_session_monitor(self, host_name):
         def monitor_worker():
-            time.sleep(2.0)
+            has_withdrawn = False
+            time.sleep(1.0)
             while True:
                 status = self._api_get("/api/rdp/status") or {}
                 state = status.get("state", "IDLE")
-                if state in ("IDLE", "ERROR"):
+                if state == "CONNECTED" and not has_withdrawn:
+                    has_withdrawn = True
+                    self.root.after(0, self.root.withdraw)
+                elif state in ("IDLE", "ERROR"):
                     self.root.after(0, lambda: self._on_rdp_session_ended(status, host_name))
                     break
-                time.sleep(1.5)
+                time.sleep(1.2)
 
         threading.Thread(target=monitor_worker, daemon=True).start()
 
