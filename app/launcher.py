@@ -15,6 +15,7 @@ import logging
 import threading
 import urllib.request
 import urllib.error
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, font as tkfont, messagebox
 
@@ -219,15 +220,19 @@ class NativeLauncherApp:
             pady=5
         )
         self.badge_ts_frame.pack(side=tk.LEFT)
+        self.badge_ts_frame.config(cursor="hand2")
+        self.badge_ts_frame.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
         self.lbl_badge_ts = tk.Label(
             self.badge_ts_frame,
             text="● Tailscale: Verifica...",
             font=self.font_badge,
             fg=COLOR_TEXT_MUTED,
-            bg=COLOR_CARD
+            bg=COLOR_CARD,
+            cursor="hand2"
         )
         self.lbl_badge_ts.pack()
+        self.lbl_badge_ts.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
     # --- 2. Central Card UI (Faithful 1:1 match to screen_clean.png) ---
 
@@ -295,15 +300,20 @@ class NativeLauncherApp:
             pady=14
         )
         self.box_ts.grid(row=0, column=1, padx=(10, 0), sticky="nsew")
+        self.box_ts.config(cursor="hand2")
+        self.box_ts.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
-        lbl_ts_title = tk.Label(self.box_ts, text="STATO TAILSCALE", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX)
+        lbl_ts_title = tk.Label(self.box_ts, text="STATO TAILSCALE", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX, cursor="hand2")
         lbl_ts_title.pack()
+        lbl_ts_title.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
-        self.lbl_ts_val = tk.Label(self.box_ts, text="--", font=self.font_status_val, fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX)
+        self.lbl_ts_val = tk.Label(self.box_ts, text="--", font=self.font_status_val, fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX, cursor="hand2")
         self.lbl_ts_val.pack(pady=(2, 2))
+        self.lbl_ts_val.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
-        self.lbl_ts_sub = tk.Label(self.box_ts, text="IP: --", font=self.font_status_sub, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX)
+        self.lbl_ts_sub = tk.Label(self.box_ts, text="IP: --", font=self.font_status_sub, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX, cursor="hand2")
         self.lbl_ts_sub.pack()
+        self.lbl_ts_sub.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
         # Divider line
         div1 = tk.Frame(self.card_main, height=1, bg=COLOR_CARD_BORDER)
@@ -717,10 +727,25 @@ class NativeLauncherApp:
             self.lbl_ts_sub.config(text=f"IP: {ts_ip}")
             self.lbl_badge_ts.config(text=f"● Tailscale: {ts_ip}", fg=COLOR_SUCCESS)
             self.badge_ts_frame.config(highlightbackground=COLOR_BTN_CONNECT)
+        elif not ts.get("enabled", True):
+            self.lbl_ts_val.config(text="DISABILITATO", fg=COLOR_TEXT_MUTED)
+            self.lbl_ts_sub.config(text="Disattivato in Impostazioni")
+            self.lbl_badge_ts.config(text="○ Tailscale: Disabilitato", fg=COLOR_TEXT_MUTED)
+            self.badge_ts_frame.config(highlightbackground=COLOR_CARD_BORDER)
+        elif ts.get("status") == "Autenticazione richiesta":
+            self.lbl_ts_val.config(text="ACCESSO RICHIESTO", fg="#f59e0b")
+            self.lbl_ts_sub.config(text="Apri Impostazioni per Login")
+            self.lbl_badge_ts.config(text="⚠ Tailscale: Accedi", fg="#f59e0b")
+            self.badge_ts_frame.config(highlightbackground="#f59e0b")
+        elif ts.get("status") == "Connessione in corso":
+            self.lbl_ts_val.config(text="IN CORSO", fg=COLOR_TITLE_CYAN)
+            self.lbl_ts_sub.config(text="Connessione alla Tailnet...")
+            self.lbl_badge_ts.config(text="◌ Tailscale: In corso", fg=COLOR_TITLE_CYAN)
+            self.badge_ts_frame.config(highlightbackground=COLOR_TITLE_CYAN)
         else:
-            self.lbl_ts_val.config(text="NON ATTIVO", fg=COLOR_TEXT_MUTED)
+            self.lbl_ts_val.config(text="NON ATTIVO", fg=COLOR_BTN_CANCEL)
             self.lbl_ts_sub.config(text="Verifica collegamento...")
-            self.lbl_badge_ts.config(text="○ Tailscale: Non attivo", fg=COLOR_TEXT_MUTED)
+            self.lbl_badge_ts.config(text="○ Tailscale: Non attivo", fg=COLOR_BTN_CANCEL)
             self.badge_ts_frame.config(highlightbackground=COLOR_CARD_BORDER)
 
         # Footer Status Info
@@ -1320,59 +1345,84 @@ class NativeLauncherApp:
         btn_box.pack(fill=tk.X)
         tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(side=tk.RIGHT)
 
-    def open_settings_dialog(self):
-        """Displays interactive video quality / RDP settings and Web Admin remote access URL."""
+    def open_settings_dialog(self, initial_tab="rdp"):
+        """Displays interactive video quality / RDP settings and Tailscale VPN management."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("Impostazioni Qualità Video & RDP")
-        dialog.geometry("560x540")
+        dialog.title("Impostazioni Sistema & Tailscale")
+        dialog.geometry("580x620")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
-        self._center_window(dialog, 560, 540)
+        self._center_window(dialog, 580, 620)
 
-        tk.Label(dialog, text="⚙  Qualità Video, Nitidezza Testi & RDP", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 10))
+        tk.Label(dialog, text="⚙  Impostazioni & Rete VPN", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(14, 8))
 
         cur_settings = {}
         try:
             from app.system import get_settings
             cur_settings = get_settings()
         except Exception:
-            cur_settings = {"rdp_client": "hidathin-rdp", "profile": "balanced", "overscan": "none", "color_depth": 32}
+            cur_settings = {
+                "rdp_client": "hidathin-rdp", "profile": "balanced",
+                "overscan": "none", "color_depth": 32, "tailscale": {"enabled": True}
+            }
 
-        form = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
-        form.pack(fill=tk.X)
+        # Tab navigation bar
+        tab_bar = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
+        tab_bar.pack(fill=tk.X, pady=(0, 10))
+        tab_bar.columnconfigure(0, weight=1)
+        tab_bar.columnconfigure(1, weight=1)
+
+        btn_tab_rdp = tk.Button(
+            tab_bar, text="⚙  RDP & Schermo", font=self.font_btn_action,
+            relief=tk.FLAT, bd=0, cursor="hand2", padx=12, pady=6
+        )
+        btn_tab_rdp.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+
+        btn_tab_ts = tk.Button(
+            tab_bar, text="🌐  Tailscale VPN", font=self.font_btn_action,
+            relief=tk.FLAT, bd=0, cursor="hand2", padx=12, pady=6
+        )
+        btn_tab_ts.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+
+        # Main content container
+        content_container = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
+        content_container.pack(fill=tk.BOTH, expand=True)
+
+        # Tab 1: RDP & Display
+        frame_rdp = tk.Frame(content_container, bg=COLOR_CARD)
 
         # 1. RDP Client Program
-        tk.Label(form, text="Programma Client RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        tk.Label(frame_rdp, text="Programma Client RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         client_map = [
             ("hidathin-rdp", "hidathin-rdp (Consigliato - Nativo Zero-Copy WTware ARM64)"),
             ("xfreerdp3", "xfreerdp3 (Standard FreeRDP 3.x upstream)"),
         ]
         client_var = tk.StringVar()
-        client_combo = ttk.Combobox(form, textvariable=client_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        client_combo = ttk.Combobox(frame_rdp, textvariable=client_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
         client_combo["values"] = [label for _, label in client_map]
         cur_client = cur_settings.get("rdp_client", "hidathin-rdp")
         client_idx = next((i for i, (k, _) in enumerate(client_map) if k == cur_client), 0)
         client_combo.current(client_idx)
-        client_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
+        client_combo.pack(fill=tk.X, pady=(0, 8), ipady=3)
 
         # 2. RDP Profile
-        tk.Label(form, text="Profilo Grafico RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        tk.Label(frame_rdp, text="Profilo Grafico RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         profile_map = [
             ("balanced", "Bilanciato (Consigliato - Testi nitidi ClearType Lossless 1:1)"),
             ("quality", "Qualità Massima (AVC444 Colore 4:4:4 + Effetti Completi)"),
             ("performance", "Prestazioni Elevate (Bassa banda, senza animazioni)"),
         ]
         prof_var = tk.StringVar()
-        prof_combo = ttk.Combobox(form, textvariable=prof_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        prof_combo = ttk.Combobox(frame_rdp, textvariable=prof_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
         prof_combo["values"] = [label for _, label in profile_map]
         cur_prof = cur_settings.get("profile", "balanced")
         prof_idx = next((i for i, (k, _) in enumerate(profile_map) if k == cur_prof), 0)
         prof_combo.current(prof_idx)
-        prof_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
+        prof_combo.pack(fill=tk.X, pady=(0, 8), ipady=3)
 
-        # 3. Overscan / Pixel Mapping
-        tk.Label(form, text="Mappatura Pixel Schermo / Overscan TV:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        # 3. Overscan
+        tk.Label(frame_rdp, text="Mappatura Pixel Schermo / Overscan TV:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         overscan_map = [
             ("none", "1:1 Pixel-Perfect (Consigliata - Massima nitidezza caratteri)"),
             ("light", "Overscan Leggero (~2.5% - Solo per TV che tagliano i bordi)"),
@@ -1380,45 +1430,241 @@ class NativeLauncherApp:
             ("heavy", "Overscan Massimo (~7.5% - Solo per TV con zoom elevato)"),
         ]
         over_var = tk.StringVar()
-        over_combo = ttk.Combobox(form, textvariable=over_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        over_combo = ttk.Combobox(frame_rdp, textvariable=over_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
         over_combo["values"] = [label for _, label in overscan_map]
         cur_over = cur_settings.get("overscan", "none")
         if cur_over == "auto":
             cur_over = "none"
         over_idx = next((i for i, (k, _) in enumerate(overscan_map) if k == cur_over), 0)
         over_combo.current(over_idx)
-        over_combo.pack(fill=tk.X, pady=(0, 10), ipady=4)
+        over_combo.pack(fill=tk.X, pady=(0, 8), ipady=3)
 
         # 4. Color Depth
-        tk.Label(form, text="Profondità Colore:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(4, 2))
+        tk.Label(frame_rdp, text="Profondità Colore:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         bpp_map = [
             (32, "32-bit TrueColor (Consigliato per antialiasing subpixel ClearType)"),
             (24, "24-bit Standard"),
             (16, "16-bit Risparmio Banda"),
         ]
         bpp_var = tk.StringVar()
-        bpp_combo = ttk.Combobox(form, textvariable=bpp_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        bpp_combo = ttk.Combobox(frame_rdp, textvariable=bpp_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
         bpp_combo["values"] = [label for _, label in bpp_map]
         cur_bpp = int(cur_settings.get("color_depth", 32))
         bpp_idx = next((i for i, (k, _) in enumerate(bpp_map) if k == cur_bpp), 0)
         bpp_combo.current(bpp_idx)
-        bpp_combo.pack(fill=tk.X, pady=(0, 12), ipady=4)
-
-        status_lbl = tk.Label(form, text="", font=self.font_link, fg=COLOR_SUCCESS, bg=COLOR_CARD)
-        status_lbl.pack(pady=(0, 6))
+        bpp_combo.pack(fill=tk.X, pady=(0, 10), ipady=3)
 
         ts_ip = self.system_status.get("tailscale", {}).get("ip")
         lan_ip = self.system_status.get("network", {}).get("primary_ip") or "127.0.0.1"
-        web_info = f"Pannello Web Admin completo:  http://{lan_ip}:8080"
+        web_info = f"Pannello Web Admin:  http://{lan_ip}:8080"
         if ts_ip:
             web_info += f"  |  http://{ts_ip}:8080"
-        tk.Label(dialog, text=web_info, font=self.font_status_sub, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD).pack(pady=(0, 10))
+        tk.Label(frame_rdp, text=web_info, font=self.font_status_sub, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD).pack(pady=(4, 0))
+
+        # Tab 2: Tailscale VPN
+        frame_ts = tk.Frame(content_container, bg=COLOR_CARD)
+
+        ts_enabled_init = cur_settings.get("tailscale", {}).get("enabled", True)
+        ts_enabled_var = tk.BooleanVar(value=ts_enabled_init)
+
+        # Toggle row with switch & badge
+        ts_header = tk.Frame(frame_ts, bg=COLOR_CARD)
+        ts_header.pack(fill=tk.X, pady=(0, 10))
+
+        chk_ts = tk.Checkbutton(
+            ts_header, text="Abilita Tailscale VPN", variable=ts_enabled_var,
+            font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_CARD,
+            activeforeground=COLOR_TEXT_MAIN, activebackground=COLOR_CARD,
+            selectcolor=COLOR_INNER_BOX, cursor="hand2"
+        )
+        chk_ts.pack(side=tk.LEFT)
+
+        lbl_ts_badge = tk.Label(
+            ts_header, text="● In verifica...", font=self.font_badge,
+            fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX, padx=10, pady=4
+        )
+        lbl_ts_badge.pack(side=tk.RIGHT)
+
+        # Tailscale details card
+        card_ts_info = tk.Frame(frame_ts, bg=COLOR_INNER_BOX, highlightbackground=COLOR_INNER_BORDER, highlightthickness=1, padx=16, pady=12)
+        card_ts_info.pack(fill=tk.X, pady=(0, 10))
+        card_ts_info.columnconfigure(1, weight=1)
+
+        def make_ts_info_row(row, label_text):
+            tk.Label(card_ts_info, text=label_text, font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX, anchor="w").grid(row=row, column=0, sticky="w", pady=2)
+            val_lbl = tk.Label(card_ts_info, text="--", font=self.font_link, fg=COLOR_TEXT_MAIN, bg=COLOR_INNER_BOX, anchor="w")
+            val_lbl.grid(row=row, column=1, sticky="w", padx=(10, 0), pady=2)
+            return val_lbl
+
+        lbl_val_ip = make_ts_info_row(0, "Indirizzo IP:")
+        lbl_val_host = make_ts_info_row(1, "Nome Dispositivo:")
+        lbl_val_net = make_ts_info_row(2, "Tailnet:")
+
+        # Auth URL Banner (hidden by default)
+        auth_banner = tk.Frame(frame_ts, bg=COLOR_INNER_BOX, highlightbackground=COLOR_ACCENT_BLUE, highlightthickness=1, padx=12, pady=10)
+        lbl_auth_msg = tk.Label(auth_banner, text="Autenticazione richiesta per accedere alla Tailnet.", font=self.font_status_sub, fg=COLOR_TITLE_CYAN, bg=COLOR_INNER_BOX, anchor="w")
+        lbl_auth_msg.pack(fill=tk.X, pady=(0, 6))
+
+        current_auth_url = {"url": None}
+
+        def open_auth_link():
+            if current_auth_url["url"]:
+                try:
+                    webbrowser.open(current_auth_url["url"])
+                except Exception as ex:
+                    lbl_ts_msg.config(text=f"Errore apertura browser: {ex}", fg=COLOR_BTN_CANCEL)
+
+        btn_open_auth = tk.Button(
+            auth_banner, text="🌐 Apri link di accesso", font=self.font_btn_action,
+            fg="#ffffff", bg=COLOR_ACCENT_BLUE, activeforeground="#ffffff",
+            activebackground=COLOR_TITLE_CYAN, relief=tk.FLAT, bd=0,
+            cursor="hand2", padx=10, pady=4, command=open_auth_link
+        )
+        btn_open_auth.pack(anchor="w")
+
+        # Action buttons (2x2 grid)
+        actions = tk.Frame(frame_ts, bg=COLOR_CARD)
+        actions.pack(fill=tk.X, pady=(0, 8))
+        actions.columnconfigure(0, weight=1, uniform="tsact")
+        actions.columnconfigure(1, weight=1, uniform="tsact")
+
+        def run_ts_action(endpoint, wait_msg):
+            lbl_ts_msg.config(text=wait_msg, fg=COLOR_TITLE_CYAN)
+            def worker():
+                res = self._api_post(endpoint)
+                self.root.after(0, lambda: on_ts_action_done(res))
+            threading.Thread(target=worker, daemon=True).start()
+
+        def on_ts_action_done(res):
+            if res.get("tailscale"):
+                update_ts_display(res["tailscale"])
+            lbl_ts_msg.config(
+                text=res.get("message", "Operazione completata"),
+                fg=COLOR_SUCCESS if res.get("success") else COLOR_BTN_CANCEL
+            )
+
+        btn_ts_conn = tk.Button(
+            actions, text="⚡ Connetti", font=self.font_btn_action, fg="#ffffff",
+            bg=COLOR_BTN_CONNECT, activeforeground="#ffffff",
+            activebackground=COLOR_BTN_CONNECT_HOVER, relief=tk.FLAT, bd=0,
+            cursor="hand2", padx=8, pady=6,
+            command=lambda: run_ts_action("/api/tailscale/connect", "Connessione Tailscale in corso...")
+        )
+        btn_ts_conn.grid(row=0, column=0, sticky="nsew", padx=(0, 4), pady=(0, 6), ipady=4)
+
+        btn_ts_disc = tk.Button(
+            actions, text="⏹ Disconnetti", font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
+            bg=COLOR_BTN_SECONDARY, activeforeground=COLOR_TEXT_MAIN,
+            activebackground=COLOR_BTN_SECONDARY_HOVER, relief=tk.FLAT, bd=0,
+            cursor="hand2", padx=8, pady=6,
+            command=lambda: run_ts_action("/api/tailscale/disconnect", "Disconnessione Tailscale in corso...")
+        )
+        btn_ts_disc.grid(row=0, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6), ipady=4)
+
+        btn_ts_ref = tk.Button(
+            actions, text="🔄 Aggiorna Stato", font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
+            bg=COLOR_BTN_SECONDARY, activeforeground=COLOR_TEXT_MAIN,
+            activebackground=COLOR_BTN_SECONDARY_HOVER, relief=tk.FLAT, bd=0,
+            cursor="hand2", padx=8, pady=6,
+            command=lambda: refresh_ts_info(force=True)
+        )
+        btn_ts_ref.grid(row=1, column=0, sticky="nsew", padx=(0, 4), ipady=4)
+
+        btn_ts_log = tk.Button(
+            actions, text="🔑 Accedi / Login", font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
+            bg=COLOR_BTN_SECONDARY, activeforeground=COLOR_TEXT_MAIN,
+            activebackground=COLOR_BTN_SECONDARY_HOVER, relief=tk.FLAT, bd=0,
+            cursor="hand2", padx=8, pady=6,
+            command=lambda: run_ts_action("/api/tailscale/login", "Avvio autenticazione Tailscale...")
+        )
+        btn_ts_log.grid(row=1, column=1, sticky="nsew", padx=(4, 0), ipady=4)
+
+        lbl_ts_msg = tk.Label(frame_ts, text="", font=self.font_link, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w", justify=tk.LEFT, wraplength=520)
+        lbl_ts_msg.pack(fill=tk.X, pady=(4, 0))
+
+        def update_ts_display(ts_data):
+            if not ts_data:
+                return
+            if isinstance(ts_data.get("enabled"), bool):
+                ts_enabled_var.set(ts_data["enabled"])
+
+            status_str = ts_data.get("status") or "Disconnesso"
+            ip_val = ts_data.get("ip") or "--"
+            host_val = ts_data.get("hostname") or "--"
+            net_val = ts_data.get("tailnet") or "--"
+            current_auth_url["url"] = ts_data.get("auth_url")
+
+            lbl_val_ip.config(text=ip_val, fg=COLOR_SUCCESS if ts_data.get("connected") else COLOR_TEXT_MUTED)
+            lbl_val_host.config(text=host_val)
+            lbl_val_net.config(text=net_val)
+
+            if ts_data.get("connected"):
+                lbl_ts_badge.config(text=f"● {status_str}", fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX)
+            elif not ts_data.get("enabled", True):
+                lbl_ts_badge.config(text="○ Disabilitato", fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX)
+            elif status_str == "Autenticazione richiesta":
+                lbl_ts_badge.config(text="⚠ Accedi", fg="#f59e0b", bg=COLOR_INNER_BOX)
+            elif status_str == "Connessione in corso":
+                lbl_ts_badge.config(text="◌ In corso", fg=COLOR_TITLE_CYAN, bg=COLOR_INNER_BOX)
+            else:
+                lbl_ts_badge.config(text=f"○ {status_str}", fg=COLOR_BTN_CANCEL, bg=COLOR_INNER_BOX)
+
+            if current_auth_url["url"]:
+                auth_banner.pack(fill=tk.X, pady=(0, 10))
+            else:
+                auth_banner.pack_forget()
+
+        def refresh_ts_info(force=False):
+            lbl_ts_msg.config(text="Verifica stato in corso...", fg=COLOR_TITLE_CYAN)
+            def worker():
+                endpoint = "/api/tailscale/status?force=true" if force else "/api/tailscale/status"
+                res = self._api_get(endpoint)
+                self.root.after(0, lambda: on_refresh_done(res))
+            def on_refresh_done(res):
+                if res:
+                    update_ts_display(res)
+                    lbl_ts_msg.config(text="Stato aggiornato", fg=COLOR_SUCCESS)
+                else:
+                    lbl_ts_msg.config(text="Impossibile aggiornare lo stato", fg=COLOR_BTN_CANCEL)
+            threading.Thread(target=worker, daemon=True).start()
+
+        def on_ts_toggle():
+            new_val = ts_enabled_var.get()
+            lbl_ts_msg.config(text="Applicazione toggle Tailscale...", fg=COLOR_TITLE_CYAN)
+            def worker():
+                res = self._api_post("/api/tailscale/toggle", {"enabled": new_val})
+                self.root.after(0, lambda: on_ts_action_done(res))
+            threading.Thread(target=worker, daemon=True).start()
+
+        chk_ts.config(command=on_ts_toggle)
+
+        # Tab switching logic
+        def show_tab(tab_name):
+            if tab_name == "tailscale":
+                frame_rdp.pack_forget()
+                frame_ts.pack(fill=tk.BOTH, expand=True)
+                btn_tab_ts.config(bg=COLOR_ACCENT_BLUE, fg="#ffffff")
+                btn_tab_rdp.config(bg=COLOR_BTN_SECONDARY, fg=COLOR_TEXT_MAIN)
+                refresh_ts_info(force=False)
+            else:
+                frame_ts.pack_forget()
+                frame_rdp.pack(fill=tk.BOTH, expand=True)
+                btn_tab_rdp.config(bg=COLOR_ACCENT_BLUE, fg="#ffffff")
+                btn_tab_ts.config(bg=COLOR_BTN_SECONDARY, fg=COLOR_TEXT_MAIN)
+
+        btn_tab_rdp.config(command=lambda: show_tab("rdp"))
+        btn_tab_ts.config(command=lambda: show_tab("tailscale"))
+
+        # Status label at bottom
+        status_lbl = tk.Label(dialog, text="", font=self.font_link, fg=COLOR_SUCCESS, bg=COLOR_CARD)
+        status_lbl.pack(side=tk.BOTTOM, pady=(0, 2))
 
         def save_and_apply():
             sel_client = client_map[max(0, client_combo.current())][0]
             sel_prof = profile_map[max(0, prof_combo.current())][0]
             sel_over = overscan_map[max(0, over_combo.current())][0]
             sel_bpp = bpp_map[max(0, bpp_combo.current())][0]
+            sel_ts_enabled = ts_enabled_var.get()
             status_lbl.config(text="Applicazione impostazioni in corso...", fg=COLOR_TITLE_CYAN)
 
             def worker():
@@ -1426,7 +1672,8 @@ class NativeLauncherApp:
                     "rdp_client": sel_client,
                     "profile": sel_prof,
                     "overscan": sel_over,
-                    "color_depth": sel_bpp
+                    "color_depth": sel_bpp,
+                    "tailscale": {"enabled": sel_ts_enabled}
                 })
                 self._api_post("/api/system/overscan/apply", {"mode": sel_over})
                 self.root.after(0, lambda: on_saved(res))
@@ -1444,6 +1691,8 @@ class NativeLauncherApp:
         btn_box.pack(fill=tk.X, side=tk.BOTTOM)
         tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
         tk.Button(btn_box, text="Salva e Applica", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_and_apply).pack(side=tk.RIGHT)
+
+        show_tab(initial_tab)
 
     def open_credentials_dialog(self, host_key, host_info, alert_msg=None, prefill_user=None, attempt=1):
         """Modal credentials prompt:

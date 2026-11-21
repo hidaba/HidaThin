@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to `0.2.x` versioning.
 
+## [0.2.31] - 2026-11-21
+
+### Added
+- **Tailscale VPN Management in Settings Menu & Native Launcher (`app/tailscale.py`, `app/launcher.py`, `templates/settings.html`, `app/main.py`, `app/system.py`, `config/settings.yaml`, `install.sh`)**:
+  - Added dedicated **Tailscale VPN** configuration and control section accessible from the Settings dialog and Web Admin.
+  - Implemented real-time status monitoring with cache TTL (15s monotonic time) avoiding CPU overhead on Raspberry Pi 3: detects `Connected`, `Connecting`, `Disconnected`, `Disabled`, `Authentication Required`, `Not Installed`, and `Error`.
+  - Added persistent ON/OFF toggle switch (`tailscale.enabled`) in `config/settings.yaml` and schema validation in `app/system.py`.
+  - Implemented official CLI and API-driven connection controls: Connect (`tailscale up --reset=false`), Disconnect (`tailscale down`), Refresh Status (`tailscale status --json`), and Login flow (`tailscale login` with AuthURL extraction).
+  - Added dynamic authentication banner with clickable web link when Tailnet approval or re-authentication is required.
+  - Added interactive status badge and card in Native Tkinter Launcher (`app/launcher.py`), supporting direct click-to-open navigation into the Tailscale settings tab.
+  - Added automatic boot-time state application (`apply_boot_tailscale_state`) in a background daemon thread without blocking Kiosk UI startup.
+  - Integrated smart RDP routing in `app/rdp.py`:
+    - RDP targets with LAN addresses (`192.168.x.x`, `10.x.x.x`, private hostnames) connect directly even when Tailscale is disabled or disconnected.
+    - Tailscale targets (CGNAT `100.64.0.0/10`, IPv6 `fd7a:115c:a1e0::/48`, `.ts.net`, MagicDNS peers) validate VPN connectivity and return friendly descriptive errors if Tailscale is disabled or disconnected.
+  - Added comprehensive test suite `tests/test_tailscale_settings.py` covering all 9 mandatory verification scenarios with 100% pass rate.
+
 ## [0.2.30] - 2026-11-21
 
 ### Added

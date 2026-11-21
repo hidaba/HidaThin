@@ -242,13 +242,27 @@ class RDPManager:
                 return path
         return None
 
-    def connect(self, host_entry, username=None, password=None):
+    def connect(self, host_entry, username=None, password=None, check_tailscale=False):
         """
         Launches FreeRDP in a background subprocess.
         host_entry: dict with 'hostname', 'ip', 'port', 'name'
         username: optional Windows username
         password: optional Windows password (passed securely via stdin, never CLI)
+        check_tailscale: if True, validates Tailscale readiness for Tailscale targets
         """
+        if check_tailscale:
+            try:
+                from app.tailscale import is_tailscale_target, is_tailscale_enabled, get_tailscale_status
+                if is_tailscale_target(host_entry):
+                    if not is_tailscale_enabled():
+                        return False, "Tailscale è disabilitato nelle impostazioni. Abilita Tailscale per raggiungere questo host VPN."
+                    ts_status = get_tailscale_status(force=False)
+                    if not ts_status.get("connected"):
+                        status_label = ts_status.get("status", "Disconnesso")
+                        return False, f"Tailscale non è connesso ({status_label}). Connetti la VPN per raggiungere questo host."
+            except Exception as e:
+                logger.warning(f"Error checking Tailscale prerequisites for RDP: {e}")
+
         with self.lock:
             if self.active_session is not None and self.active_session.process is not None:
                 if self.active_session.process.poll() is None:

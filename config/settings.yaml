@@ -8,6 +8,8 @@ sound: true               # true | false
 auto_reconnect: true      # true | false
 max_reconnect_retries: 3
 fullscreen: true
+tailscale:
+  enabled: true
 vnc:
   enabled: true
   port: 5900

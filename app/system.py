@@ -24,6 +24,9 @@ DEFAULT_SETTINGS = {
     "auto_reconnect": True,
     "max_reconnect_retries": 3,
     "fullscreen": True,
+    "tailscale": {
+        "enabled": True,
+    },
     "vnc": {
         "enabled": True,
         "port": 5900,
@@ -100,6 +103,11 @@ def validate_settings(settings):
                 return False, f"Profondità colore non valida: {cd}. Valori ammessi: {', '.join(map(str, VALID_COLOR_DEPTHS))}"
         except (ValueError, TypeError):
             return False, "Profondità colore non valida."
+
+    if "tailscale" in settings and isinstance(settings["tailscale"], dict):
+        ts = settings["tailscale"]
+        if "enabled" in ts and not isinstance(ts["enabled"], bool):
+            return False, "tailscale.enabled deve essere un valore booleano."
 
     if "vnc" in settings and isinstance(settings["vnc"], dict):
         vnc = settings["vnc"]

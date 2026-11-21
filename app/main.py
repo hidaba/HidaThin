@@ -13,7 +13,11 @@ from flask import Flask, render_template, request, jsonify
 
 from app import __version__
 from app.wifi import get_network_status, scan_wifi_networks, connect_wifi, forget_wifi
-from app.tailscale import get_tailscale_status, restart_tailscale, ping_host
+from app.tailscale import (
+    get_tailscale_status, set_tailscale_enabled, connect_tailscale,
+    disconnect_tailscale, login_tailscale, apply_boot_tailscale_state,
+    is_tailscale_target, is_tailscale_enabled, restart_tailscale, ping_host
+)
 from app.system import (
     get_settings, save_settings, get_system_metrics, reboot_system, poweroff_system,
     get_fs_status, remount_fs, start_os_update, get_os_update_status, write_secure_yaml,
@@ -180,21 +184,23 @@ def _refresh_system_status():
         host_info = data.get("hosts", {}).get(default_key, {})
 
         host_reachable = None
-        if ts.get("connected") and host_info:
-            target = host_info.get("hostname")
-            fallback_target = host_info.get("ip")
-            port = int(host_info.get("port", 3389))
-            
-            for candidate in filter(None, [target, fallback_target]):
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(0.8)
-                    s.connect((candidate, port))
-                    s.close()
-                    host_reachable = True
-                    break
-                except Exception:
-                    host_reachable = False
+        if host_info:
+            is_ts = is_tailscale_target(host_info)
+            if not is_ts or ts.get("connected"):
+                target = host_info.get("hostname")
+                fallback_target = host_info.get("ip")
+                port = int(host_info.get("port", 3389))
+                
+                for candidate in filter(None, [target, fallback_target]):
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        s.settimeout(0.8)
+                        s.connect((candidate, port))
+                        s.close()
+                        host_reachable = True
+                        break
+                    except Exception:
+                        host_reachable = False
 
         status_snapshot = {
             "version": __version__,
@@ -288,7 +294,8 @@ def settings_page():
     metrics = get_system_metrics()
     vnc = get_vnc_status()
     fs = get_fs_status()
-    return render_template("settings.html", settings=settings, metrics=metrics, vnc=vnc, fs=fs)
+    ts = get_tailscale_status()
+    return render_template("settings.html", settings=settings, metrics=metrics, vnc=vnc, fs=fs, tailscale=ts)
 
 @app.route("/diagnostics")
 def diagnostics_page():
@@ -343,16 +350,22 @@ def api_rdp_connect():
     host_entry = hosts[host_key]
     stored_password = host_entry.get("password")
 
-    # Check Tailscale readiness
-    ts_status = get_tailscale_status()
-    if not ts_status.get("connected"):
-        restart_tailscale()
-        ts_status = get_tailscale_status(force=True)
-        if not ts_status.get("connected"):
+    # Check Tailscale readiness ONLY if target requires VPN
+    if is_tailscale_target(host_entry):
+        if not is_tailscale_enabled():
             return jsonify({
                 "success": False,
-                "message": "Connessione Tailscale non disponibile. Verifica lo stato di rete."
+                "message": "Tailscale è disabilitato nelle impostazioni. Abilita Tailscale per raggiungere questo host VPN."
             })
+        ts_status = get_tailscale_status()
+        if not ts_status.get("connected"):
+            restart_tailscale()
+            ts_status = get_tailscale_status(force=True)
+            if not ts_status.get("connected"):
+                return jsonify({
+                    "success": False,
+                    "message": "Connessione Tailscale non disponibile. Verifica lo stato di rete o effettua l'accesso VPN."
+                })
 
     # Password semantics:
     effective_password = None
@@ -372,7 +385,7 @@ def api_rdp_connect():
 
     effective_user = username if (username is not None and username != "") else host_entry.get("username")
 
-    success, msg = rdp_manager.connect(host_entry, username=effective_user, password=effective_password)
+    success, msg = rdp_manager.connect(host_entry, username=effective_user, password=effective_password, check_tailscale=True)
     return jsonify({"success": success, "message": msg})
 
 @app.route("/api/rdp/disconnect", methods=["POST"])
@@ -516,6 +529,18 @@ def api_hosts_set_default():
 @app.route("/api/settings/save", methods=["POST"])
 def api_settings_save():
     req = request.get_json() or {}
+    ts_req = req.get("tailscale")
+    if isinstance(ts_req, dict) and "enabled" in ts_req:
+        new_enabled = bool(ts_req["enabled"])
+        success, msg = set_tailscale_enabled(new_enabled)
+        if not success:
+            return jsonify({"success": False, "message": msg}), 500
+        other_settings = {k: v for k, v in req.items() if k != "tailscale"}
+        if other_settings:
+            ok2, msg2 = save_settings(other_settings)
+            if not ok2:
+                return jsonify({"success": False, "message": msg2}), 500
+        return jsonify({"success": True, "message": "Impostazioni salvate"})
     success, msg = save_settings(req)
     return jsonify({"success": success, "message": msg})
 
@@ -559,6 +584,47 @@ def api_system_update_os():
 @app.route("/api/system/update-os/status")
 def api_system_update_os_status():
     return jsonify(get_os_update_status())
+
+@app.route("/api/tailscale/status")
+def api_tailscale_status():
+    force = request.args.get("force", "false").lower() in ("true", "1")
+    return jsonify(get_tailscale_status(force=force))
+
+@app.route("/api/tailscale/toggle", methods=["POST"])
+def api_tailscale_toggle():
+    req = request.get_json() or {}
+    enabled = bool(req.get("enabled", True))
+    success, msg = set_tailscale_enabled(enabled)
+    return jsonify({"success": success, "message": msg, "tailscale": get_tailscale_status(force=True)})
+
+@app.route("/api/tailscale/connect", methods=["POST"])
+def api_tailscale_connect():
+    success, msg, auth_url = connect_tailscale()
+    return jsonify({
+        "success": success,
+        "message": msg,
+        "auth_url": auth_url,
+        "tailscale": get_tailscale_status(force=True)
+    })
+
+@app.route("/api/tailscale/disconnect", methods=["POST"])
+def api_tailscale_disconnect():
+    success, msg = disconnect_tailscale()
+    return jsonify({
+        "success": success,
+        "message": msg,
+        "tailscale": get_tailscale_status(force=True)
+    })
+
+@app.route("/api/tailscale/login", methods=["POST"])
+def api_tailscale_login():
+    success, msg, auth_url = login_tailscale()
+    return jsonify({
+        "success": success,
+        "message": msg,
+        "auth_url": auth_url,
+        "tailscale": get_tailscale_status(force=True)
+    })
 
 @app.route("/api/tailscale/restart", methods=["POST"])
 def api_tailscale_restart():
@@ -646,6 +712,14 @@ def api_overlay_test():
         return jsonify({"success": True, "message": "Overlay OSD avviato nell'angolo in alto a sinistra. Porta il mouse in alto a sinistra per 1s per aprirlo."})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+def _init_boot_tailscale():
+    try:
+        apply_boot_tailscale_state()
+    except Exception as e:
+        logger.error(f"Error applying boot tailscale state: {e}")
+
+threading.Thread(target=_init_boot_tailscale, daemon=True).start()
 
 if __name__ == "__main__":
     settings = get_settings()
