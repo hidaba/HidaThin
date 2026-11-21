@@ -307,7 +307,7 @@ e questo progetto segue il versionamento `0.2.x`.
   - Esecuzione automatica dello script di Fast Boot per mascherare i servizi di background bloccanti o non necessari.
   - Registrazione, abilitazione all'avvio e avvio immediato dei servizi systemd (`thinclient.service`, `thinclient-ui.service`, `thinclient-vnc.service`, `cpu-governor.service`).
   - Aggiunto wrapper `scripts/install.sh` per compatibilità da qualsiasi directory di esecuzione.
-- **Regola di Sviluppo in `GEMINI.md`**:
+- **Regola di Manutenzione del Repository**:
   - Registrata la regola vincolante di manutenzione per garantire che `install.sh` sia sempre tenuto aggiornato ad ogni modifica che coinvolge aggiunta, rimozione o variazione di file o dipendenze nel repository.
 
 

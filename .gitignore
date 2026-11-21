@@ -44,7 +44,12 @@ desktop.ini
 
 # AI Assistant & IDE files
 .gemini/
+GEMINI.md
 .antigravity/
+*Antigravity*.md
+*antigravity*.md
+AGENTS.md
+*.ai.md
 .cursor/
 .cursorrules
 .windsurf/

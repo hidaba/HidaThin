@@ -1446,7 +1446,7 @@ class NativeLauncherApp:
         tk.Button(btn_box, text="Salva e Applica", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_and_apply).pack(side=tk.RIGHT)
 
     def open_credentials_dialog(self, host_key, host_info, alert_msg=None, prefill_user=None, attempt=1):
-        """Modal credentials prompt compliant with Section 4:
+        """Modal credentials prompt:
         Connessione RDP – [Nome PC selezionato]
         - Username: campo di testo
         - Password: campo protetto
