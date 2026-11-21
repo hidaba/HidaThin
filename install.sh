@@ -110,11 +110,17 @@ if ! apt-get install -y chromium 2>/dev/null; then
 fi
 
 # Handle FreeRDP 3 with fallback to FreeRDP 2 if on older distro
-echo -e "      Installazione client FreeRDP..."
+echo -e "      Installazione client FreeRDP e librerie di compilazione per hidathin-rdp..."
 if ! apt-get install -y freerdp3-x11 2>/dev/null; then
     echo -e "${YELLOW}[WARN] Pacchetto freerdp3-x11 non disponibile nel repository APT. Provo freerdp2-x11...${NC}"
     apt-get install -y freerdp2-x11 || true
 fi
+
+# Install development headers to compile the native Zero-Copy WTware-style hidathin-rdp binary
+apt-get install -y --no-install-recommends \
+    gcc make pkg-config freerdp3-dev libwinpr3-dev \
+    libx11-dev libxext-dev libxkbfile-dev libxcursor-dev zlib1g-dev 2>/dev/null || \
+    echo -e "${YELLOW}[WARN] Header freerdp3-dev non disponibili; verrà usato xfreerdp3 standard.${NC}"
 
 # ------------------------------------------------------------------------------
 # 4. Tailscale Mesh VPN Installation
@@ -231,6 +237,16 @@ chmod -R u=rwX,go=rX "$INSTALL_DIR"
 chmod 700 "$INSTALL_DIR/config"
 chmod 600 "$INSTALL_DIR/config/"*.yaml "$INSTALL_DIR/config/"*.pass 2>/dev/null || true
 chmod +x "$INSTALL_DIR/scripts/"*.sh "$INSTALL_DIR/scripts/xinitrc" "$INSTALL_DIR/scripts/"*.py "$INSTALL_DIR/app/"*.py "$INSTALL_DIR/install.sh" 2>/dev/null || true
+
+# Compile & install native WTware-style hidathin-rdp client if sources and headers are present
+if [ -d "$INSTALL_DIR/src" ] && command -v make >/dev/null 2>&1; then
+    echo -e "      Compilazione client nativo Zero-Copy ${BOLD}hidathin-rdp${NC}..."
+    if make -C "$INSTALL_DIR/src" clean >/dev/null 2>&1 && make -C "$INSTALL_DIR/src" >/dev/null 2>&1 && make -C "$INSTALL_DIR/src" install >/dev/null 2>&1; then
+        echo -e "      ${GREEN}[OK]${NC} Client nativo /usr/local/bin/hidathin-rdp compilato e installato."
+    else
+        echo -e "      ${YELLOW}[WARN]${NC} Compilazione hidathin-rdp saltata; attivo fallback xfreerdp3."
+    fi
+fi
 
 # ------------------------------------------------------------------------------
 # 6. Hardware, Kernel & OS Optimizations

@@ -152,7 +152,7 @@
         <div class="credentials-modal-header">
             <div class="credentials-modal-icon">🔐</div>
             <div>
-                <h3 id="cred-modal-title" style="margin: 0; color: #60a5fa; font-size: 1.25rem;">Accesso a PC Remoto</h3>
+                <h3 id="cred-modal-title" style="margin: 0; color: #60a5fa; font-size: 1.25rem;">Connessione RDP – PC Remoto</h3>
                 <div id="cred-modal-subtitle" style="font-size: 0.9rem; color: #94a3b8; margin-top: 3px;">
                     Inserisci le credenziali Windows per connetterti
                 </div>
@@ -182,17 +182,17 @@
         <form id="credentials-form" onsubmit="submitCredentialsModal(event)">
             <div class="form-group" style="margin-top: 15px;">
                 <label for="cred-modal-user" style="color: #cbd5e1; font-size: 0.95rem; font-weight: 500;">
-                    Nome Utente Windows:
+                    Username:
                 </label>
-                <input type="text" id="cred-modal-user" class="input-text" placeholder="Es. Mario o Amministratore" autocomplete="username">
+                <input type="text" id="cred-modal-user" class="input-text" placeholder="Nome Utente Windows" autocomplete="username">
             </div>
 
             <div class="form-group">
                 <label for="cred-modal-pass" style="color: #cbd5e1; font-size: 0.95rem; font-weight: 500;">
-                    Password Windows:
+                    Password:
                 </label>
                 <div style="position: relative; display: flex; align-items: center;">
-                    <input type="password" id="cred-modal-pass" class="input-text" placeholder="Inserisci la password" autocomplete="current-password" style="padding-right: 48px;">
+                    <input type="password" id="cred-modal-pass" class="input-text" placeholder="Password Windows" autocomplete="current-password" style="padding-right: 48px;">
                     <button type="button" id="btn-toggle-modal-pass" class="btn-toggle-eye" onclick="toggleModalPassVisibility()" title="Mostra / Nascondi password" tabindex="-1">
                         👁
                     </button>
@@ -201,8 +201,8 @@
 
             <div class="form-group checkbox-row" style="margin-top: 10px; margin-bottom: 22px;">
                 <label class="checkbox-label" for="cred-modal-save">
-                    <input type="checkbox" id="cred-modal-save" class="checkbox-input" checked>
-                    <span>Salva credenziali per questo PC</span>
+                    <input type="checkbox" id="cred-modal-save" class="checkbox-input">
+                    <span>Salva credenziali</span>
                 </label>
             </div>
 
@@ -229,6 +229,9 @@ let currentRdpHostKey = null;
 let currentAttempt = 0;
 const MAX_RDP_ATTEMPTS = 3;
 let currentDefaultHostKey = "{{ default_host }}";
+let activeConnectionParams = null;
+const hostDrafts = {};
+let previousSelectedHostKey = null;
 
 function updateDefaultHostButton() {
     const selector = document.getElementById('host-selector');
@@ -328,11 +331,12 @@ function openCredentialsModal(opts) {
     const hostKeyInput = document.getElementById('cred-modal-host-key');
     const userInput = document.getElementById('cred-modal-user');
     const passInput = document.getElementById('cred-modal-pass');
+    const saveCheckbox = document.getElementById('cred-modal-save');
     const alertBox = document.getElementById('cred-modal-alert');
     const alertText = document.getElementById('cred-modal-alert-text');
 
     hostKeyInput.value = opts.hostKey;
-    title.innerText = `Accesso a ${opts.hostName}`;
+    title.innerText = `Connessione RDP – ${opts.hostName}`;
 
     if (opts.alertMessage) {
         alertText.innerText = opts.alertMessage;
@@ -346,6 +350,9 @@ function openCredentialsModal(opts) {
     userInput.value = opts.user || '';
     passInput.value = '';
     passInput.type = 'password';
+    if (saveCheckbox) {
+        saveCheckbox.checked = false; // Initially unchecked per Section 4
+    }
     const toggleBtn = document.getElementById('btn-toggle-modal-pass');
     if (toggleBtn) toggleBtn.innerText = '👁';
 
@@ -366,6 +373,7 @@ function closeCredentialsModal() {
     const modal = document.getElementById('credentials-modal');
     modal.style.display = 'none';
     currentAttempt = 0;
+    activeConnectionParams = null;
 }
 
 function toggleModalPassVisibility() {
@@ -442,6 +450,7 @@ function toggleCredentials() {
 function onHostSelected() {
     const selector = document.getElementById('host-selector');
     if (!selector || selector.selectedIndex < 0) return;
+    const currentHostKey = selector.value;
     const selectedOpt = selector.options[selector.selectedIndex];
     const defaultUser = selectedOpt.getAttribute('data-username') || '';
     const hasPassword = selectedOpt.getAttribute('data-has-password') === '1';
@@ -451,18 +460,37 @@ function onHostSelected() {
     const saveCheckbox = document.getElementById('rdp-save-pass');
     const btnCred = document.getElementById('btn-toggle-cred');
 
-    if (userInput) {
-        userInput.value = defaultUser;
+    // Save previous host draft if user was typing
+    if (previousSelectedHostKey && previousSelectedHostKey !== currentHostKey) {
+        hostDrafts[previousSelectedHostKey] = {
+            user: userInput ? userInput.value : '',
+            pass: passInput ? passInput.value : '',
+            savePass: saveCheckbox ? saveCheckbox.checked : false
+        };
     }
-    if (passInput) {
-        passInput.value = '';
-        passInput.placeholder = hasPassword
-            ? 'Password salvata (lascia vuoto per utilizzarla)'
-            : 'Password Windows (opzionale)';
+    previousSelectedHostKey = currentHostKey;
+
+    if (hostDrafts[currentHostKey]) {
+        // Restore uncommitted draft for this host
+        const draft = hostDrafts[currentHostKey];
+        if (userInput) userInput.value = draft.user;
+        if (passInput) passInput.value = draft.pass;
+        if (saveCheckbox) saveCheckbox.checked = draft.savePass;
+    } else {
+        if (userInput) {
+            userInput.value = defaultUser;
+        }
+        if (passInput) {
+            passInput.value = '';
+            passInput.placeholder = hasPassword
+                ? 'Password salvata (lascia vuoto per utilizzarla)'
+                : 'Password Windows (opzionale)';
+        }
+        if (saveCheckbox) {
+            saveCheckbox.checked = false;
+        }
     }
-    if (saveCheckbox) {
-        saveCheckbox.checked = hasPassword;
-    }
+
     if (btnCred) {
         btnCred.innerHTML = hasPassword
             ? 'Opzioni accesso Windows (🔒 password salvata) ▼'
@@ -536,7 +564,7 @@ function startConnection() {
 
     const enteredUser = userInput ? userInput.value.trim() : '';
     const enteredPass = passInput ? passInput.value : '';
-    const savePass = saveCheckbox ? saveCheckbox.checked : true;
+    const savePass = saveCheckbox ? saveCheckbox.checked : false;
 
     // Reset attempts if host changed
     if (currentRdpHostKey !== hostKey) {
@@ -545,42 +573,44 @@ function startConnection() {
     }
 
     const effectiveUser = enteredUser || hostSavedUser;
-    const effectivePass = enteredPass || (hasSavedPassword ? '__SAVED__' : '');
 
-    // Requirement: "se faccio connetti a un pc che non ho messo username e password alla connessione deve chiedermeli"
-    if (!effectiveUser || !effectivePass) {
+    // Caso A: Credenziali fornite o salvate
+    if (enteredPass || hasSavedPassword) {
         currentAttempt = 1;
-        openCredentialsModal({
+        executeRdpConnect({
             hostKey: hostKey,
             hostName: hostName,
-            user: effectiveUser,
-            attempt: 1,
-            alertMessage: null
+            username: effectiveUser,
+            password: enteredPass,
+            savePassword: savePass,
+            isUncredentialedAttempt: false
         });
         return;
     }
 
-    // Both are present, run attempt
-    if (currentAttempt === 0) {
-        currentAttempt = 1;
-    }
-
+    // Caso B: Username e password non configurati
+    // 1. Tentare comunque la connessione RDP senza credenziali preimpostate
+    currentAttempt = 0;
     executeRdpConnect({
         hostKey: hostKey,
         hostName: hostName,
-        username: effectiveUser,
-        password: enteredPass,
-        savePassword: savePass
+        username: effectiveUser || null,
+        password: '',
+        savePassword: false,
+        isUncredentialedAttempt: true
     });
 }
 
 function executeRdpConnect(params) {
+    activeConnectionParams = params;
     const overlay = document.getElementById('connection-overlay');
     const title = document.getElementById('connecting-title');
     const sub = document.getElementById('connecting-sub');
 
     title.innerText = `Connessione a ${params.hostName}...`;
-    sub.innerText = `Verifica credenziali e avvio sessione (Tentativo ${currentAttempt} di ${MAX_RDP_ATTEMPTS})`;
+    sub.innerText = params.isUncredentialedAttempt
+        ? "Avvio sessione FreeRDP via Tailscale..."
+        : `Verifica credenziali e avvio sessione (Tentativo ${currentAttempt || 1} di ${MAX_RDP_ATTEMPTS})`;
     overlay.style.display = 'flex';
     isConnecting = true;
 
@@ -600,7 +630,18 @@ function executeRdpConnect(params) {
             overlay.style.display = 'none';
             isConnecting = false;
             currentAttempt = 0;
-            showModal("Errore Connessione", data.message || "Impossibile avviare RDP");
+            const isAuth = isAuthFailure(data);
+            if (isAuth || params.isUncredentialedAttempt) {
+                openCredentialsModal({
+                    hostKey: params.hostKey,
+                    hostName: params.hostName,
+                    user: params.username || '',
+                    attempt: 1,
+                    alertMessage: params.isUncredentialedAttempt ? null : (data.message || "Autenticazione richiesta")
+                });
+            } else {
+                showModal("Errore Connessione", data.message || "Impossibile avviare RDP");
+            }
         }
     })
     .catch(err => {
@@ -663,16 +704,18 @@ setInterval(() => {
             isConnecting = false;
 
             if (data.error) {
-                const isAuth = isAuthFailure(data);
+                const isAuth = isAuthFailure(data) || (activeConnectionParams && activeConnectionParams.isUncredentialedAttempt);
 
                 if (isAuth) {
-                    // "se sbaglio mi fa riprovare per 3 volte"
                     if (currentAttempt < MAX_RDP_ATTEMPTS) {
                         currentAttempt++;
+                        const isUncredFirst = (activeConnectionParams && activeConnectionParams.isUncredentialedAttempt && currentAttempt === 1);
                         const remaining = MAX_RDP_ATTEMPTS - currentAttempt + 1;
-                        const alertMsg = (currentAttempt === MAX_RDP_ATTEMPTS)
-                            ? `Nome utente o password non corretti. Ultimo tentativo disponibile!`
-                            : `Nome utente o password non corretti. Riprova (${remaining} tentativi rimasti).`;
+                        const alertMsg = isUncredFirst
+                            ? null
+                            : ((currentAttempt === MAX_RDP_ATTEMPTS)
+                                ? `Nome utente o password non corretti. Ultimo tentativo disponibile!`
+                                : `Nome utente o password non corretti. Riprova (${remaining} tentativi rimasti).`);
 
                         const curUser = (document.getElementById('rdp-user')?.value || '').trim() ||
                                         (selectedOpt?.getAttribute('data-username') || '');

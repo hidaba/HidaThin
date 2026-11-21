@@ -44,6 +44,16 @@ AUTH_ERROR_KEYWORDS = [
     "0x00020014",
     "0x00020015",
     "SEC_E_LOGON_DENIED",
+    "missing username",
+    "missing password",
+    "credentials",
+    "credential",
+    "credenziali",
+    "nla",
+    "logon",
+    "login failed",
+    "failed to authenticate",
+    "auth error",
 ]
 
 def is_auth_error(retcode, log_snippet=""):
@@ -113,11 +123,12 @@ def coordinate_kiosk_browser(action="stop"):
 
 class RDPSession:
     """Encapsulates a distinct RDP session and all related subprocesses and state."""
-    def __init__(self, session_id, host_entry, effective_user, target_address):
+    def __init__(self, session_id, host_entry, effective_user, target_address, has_password=False):
         self.session_id = session_id
         self.host_entry = host_entry
         self.effective_user = effective_user
         self.target_address = target_address
+        self.has_password = has_password
         self.host_name = host_entry.get("name") or target_address
         self.process = None
         self.overlay_process = None
@@ -210,7 +221,7 @@ class RDPManager:
             }
 
     def _find_freerdp_binary(self):
-        for candidate in ["xfreerdp3", "xfreerdp"]:
+        for candidate in ["hidathin-rdp", "/usr/local/bin/hidathin-rdp", "/opt/thinclient/src/hidathin-rdp", "xfreerdp3", "xfreerdp"]:
             path = shutil.which(candidate)
             if path:
                 return path
@@ -351,7 +362,7 @@ class RDPManager:
 
             logger.info(f"Starting FreeRDP [Session {session_id}] for {target_address}")
 
-            session = RDPSession(session_id, host_entry, effective_user, target_address)
+            session = RDPSession(session_id, host_entry, effective_user, target_address, has_password=bool(effective_password))
             self.active_session = session
             self.last_error = None
             self.last_is_auth_error = False
@@ -451,6 +462,10 @@ class RDPManager:
                     session.error_message = get_freerdp_error_description(retcode)
                     self.last_error = session.error_message
                     is_auth = is_auth_error(retcode, log_snippet)
+                    if not is_auth and not session.has_password and retcode not in (0, 130, 140, 141, 143, 147):
+                        is_auth = True
+                        session.error_message = "Autenticazione richiesta: inserisci Nome Utente e Password."
+                        self.last_error = session.error_message
                     session.is_auth_error = is_auth
                     self.last_is_auth_error = is_auth
                     logger.warning(f"FreeRDP [Session {session.session_id}] exited with code {retcode} (auth_error={is_auth}): {session.error_message}")

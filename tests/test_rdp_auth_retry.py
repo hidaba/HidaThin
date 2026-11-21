@@ -98,3 +98,85 @@ def test_reset_failed_credentials_endpoint(client, tmp_path):
         assert mock_save.called
         saved_data = mock_save.call_args[0][0]
         assert "password" not in saved_data["hosts"]["pc-bad"]
+
+def test_rdp_connect_uncredentialed_behavior(client):
+    dummy_hosts = {
+        "version": 1,
+        "default_host": "pc-open",
+        "hosts": {
+            "pc-open": {"name": "PC Open", "hostname": "pc-open", "ip": "100.64.0.20"}
+        }
+    }
+    with patch("app.main.load_hosts_data", return_value=dummy_hosts), \
+         patch("app.main.get_tailscale_status", return_value={"connected": True}), \
+         patch("app.main.rdp_manager.connect", return_value=(True, "OK")) as mock_rdp_connect, \
+         patch("app.main.save_hosts_data") as mock_save:
+
+        # Attempt connection without credentials
+        res = client.post("/api/rdp/connect", json={
+            "host_key": "pc-open",
+            "username": "",
+            "password": "",
+            "save_password": False
+        })
+        assert res.status_code == 200
+        assert res.get_json()["success"] is True
+
+        # rdp_manager.connect must be called with password=None
+        mock_rdp_connect.assert_called_once()
+        call_kwargs = mock_rdp_connect.call_args
+        assert call_kwargs[1]["password"] is None
+        # save_hosts_data must NOT be called
+        mock_save.assert_not_called()
+
+def test_rdp_connect_transient_vs_saved_password(client):
+    dummy_hosts = {
+        "version": 1,
+        "default_host": "pc-mimmo",
+        "hosts": {
+            "pc-mimmo": {"name": "PC Mimmo", "hostname": "pc-mimmo", "ip": "100.64.0.7"},
+            "pc-officina": {"name": "PC Officina", "hostname": "pc-officina", "ip": "100.64.0.9"}
+        }
+    }
+
+    # Case 1: save_password=False (Transient password)
+    with patch("app.main.load_hosts_data", return_value=dict(dummy_hosts)), \
+         patch("app.main.get_tailscale_status", return_value={"connected": True}), \
+         patch("app.main.rdp_manager.connect", return_value=(True, "OK")) as mock_rdp_connect, \
+         patch("app.main.save_hosts_data") as mock_save:
+
+        res = client.post("/api/rdp/connect", json={
+            "host_key": "pc-officina",
+            "username": "temp_user",
+            "password": "temp_password_123",
+            "save_password": False
+        })
+        assert res.status_code == 200
+        mock_rdp_connect.assert_called_once()
+        assert mock_rdp_connect.call_args[1]["password"] == "temp_password_123"
+        # Must not be saved to disk
+        mock_save.assert_not_called()
+
+    # Case 2: save_password=True (Saved password)
+    with patch("app.main.load_hosts_data", return_value=dict(dummy_hosts)), \
+         patch("app.main.get_tailscale_status", return_value={"connected": True}), \
+         patch("app.main.rdp_manager.connect", return_value=(True, "OK")) as mock_rdp_connect, \
+         patch("app.main.save_hosts_data") as mock_save:
+
+        res = client.post("/api/rdp/connect", json={
+            "host_key": "pc-officina",
+            "username": "saved_user",
+            "password": "permanent_pass_456",
+            "save_password": True
+        })
+        assert res.status_code == 200
+        mock_rdp_connect.assert_called_once()
+        # Must be saved to disk for pc-officina only
+        mock_save.assert_called_once()
+        saved = mock_save.call_args[0][0]
+        assert saved["hosts"]["pc-officina"]["password"] == "permanent_pass_456"
+        assert saved["hosts"]["pc-officina"]["username"] == "saved_user"
+        # Must NOT affect other hosts
+        assert "password" not in saved["hosts"]["pc-mimmo"]
+        # Must NOT change default_host!
+        assert saved["default_host"] == "pc-mimmo"

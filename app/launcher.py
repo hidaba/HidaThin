@@ -61,12 +61,15 @@ class NativeLauncherApp:
         self.hosts_data = {}
         self.default_host_key = ""
         self.host_keys_order = []
+        self.selected_host_key = ""
+        self.transient_drafts = {}
         self.system_status = {}
         self.is_connected_rdp = False
         self.direct_rdp_cancelled = False
         self.direct_rdp_timer = None
         self.auto_connect_remaining = 3
         self.credentials_expanded = False
+        self._active_connect_params = {}
 
         # Configure geometry / fullscreen
         if not self.windowed:
@@ -726,21 +729,45 @@ class NativeLauncherApp:
         # Update Host Combobox
         combo_values = []
         self.host_keys_order = []
-        selected_index = 0
 
-        idx = 0
         for key, h in self.hosts_data.items():
             display_name = f"{h.get('name') or key} ({h.get('hostname') or h.get('ip')})"
             combo_values.append(display_name)
             self.host_keys_order.append(key)
-            if key == self.default_host_key:
-                selected_index = idx
-            idx += 1
+
+        # Selection stability:
+        # On initial startup: pick default host if present
+        # On periodic poll/refresh: PRESERVE user's currently selected host!
+        target_key = None
+        if initial or not self.selected_host_key:
+            if self.default_host_key in self.host_keys_order:
+                target_key = self.default_host_key
+            elif self.host_keys_order:
+                target_key = self.host_keys_order[0]
+            self.selected_host_key = target_key or ""
+        else:
+            if self.selected_host_key in self.host_keys_order:
+                target_key = self.selected_host_key
+            elif self.default_host_key in self.host_keys_order:
+                target_key = self.default_host_key
+                self.selected_host_key = target_key
+            elif self.host_keys_order:
+                target_key = self.host_keys_order[0]
+                self.selected_host_key = target_key
+            else:
+                target_key = ""
+                self.selected_host_key = ""
+
+        selected_index = self.host_keys_order.index(target_key) if target_key and target_key in self.host_keys_order else 0
 
         self.host_combo["values"] = combo_values
-        if combo_values:
+        if combo_values and (self.host_combo.current() != selected_index or initial):
             self.host_combo.current(selected_index)
-            self._update_default_button_state()
+        self._update_default_button_state()
+
+        # Load credentials into inputs only on initial startup or if empty
+        if initial and target_key:
+            self._load_host_credentials_into_ui(target_key)
 
         # Check Direct RDP Auto-connect on cold startup
         if initial:
@@ -748,10 +775,68 @@ class NativeLauncherApp:
             if startup.get("mode") == "direct_rdp" and self.default_host_key:
                 self._start_direct_rdp_countdown()
 
+    def _load_host_credentials_into_ui(self, host_key):
+        h_info = self.hosts_data.get(host_key, {})
+        has_saved_pwd = bool(h_info.get("has_password"))
+
+        if host_key in self.transient_drafts:
+            draft = self.transient_drafts[host_key]
+            user_val = draft.get("user", "")
+            pwd_val = draft.get("pwd", "")
+            save_val = draft.get("save", False)
+        else:
+            user_val = (h_info.get("username") or "").strip()
+            pwd_val = ""
+            save_val = False
+
+        self.entry_user.delete(0, tk.END)
+        if user_val:
+            self.entry_user.insert(0, user_val)
+            self.entry_user.config(fg=COLOR_TEXT_MAIN)
+        else:
+            self.entry_user.insert(0, "Nome Utente Windows (opzionale)")
+            self.entry_user.config(fg=COLOR_TEXT_MUTED)
+
+        self.entry_pwd.delete(0, tk.END)
+        if pwd_val:
+            self.entry_pwd.insert(0, pwd_val)
+
+        self.var_save_pass.set(save_val)
+
+        suffix = "▲" if self.credentials_expanded else "▼"
+        if has_saved_pwd:
+            self.btn_toggle_cred.config(text=f"Opzioni accesso Windows (🔒 password salvata) {suffix}")
+        else:
+            self.btn_toggle_cred.config(text=f"Opzioni accesso Windows (opzionale) {suffix}")
+
     def _on_host_selected(self, event=None):
-        self._update_default_button_state()
+        sel_idx = self.host_combo.current()
+        if 0 <= sel_idx < len(self.host_keys_order):
+            new_key = self.host_keys_order[sel_idx]
+            if new_key == self.selected_host_key:
+                self._update_default_button_state()
+                return
+
+            # Save draft for previously selected host
+            if self.selected_host_key:
+                cur_u = self.entry_user.get().strip()
+                if cur_u == "Nome Utente Windows (opzionale)":
+                    cur_u = ""
+                cur_p = self.entry_pwd.get()
+                cur_s = self.var_save_pass.get()
+                self.transient_drafts[self.selected_host_key] = {
+                    "user": cur_u,
+                    "pwd": cur_p,
+                    "save": cur_s
+                }
+
+            self.selected_host_key = new_key
+            self._load_host_credentials_into_ui(new_key)
+            self._update_default_button_state()
 
     def _get_selected_host_key(self):
+        if self.selected_host_key and self.selected_host_key in self.hosts_data:
+            return self.selected_host_key
         sel_idx = self.host_combo.current()
         if 0 <= sel_idx < len(self.host_keys_order):
             return self.host_keys_order[sel_idx]
@@ -794,31 +879,44 @@ class NativeLauncherApp:
         host_info = self.hosts_data.get(host_key, {})
         has_pwd = bool(host_info.get("has_password"))
 
-        # Check credentials from collapsible box
+        # Check credentials from options box
         custom_user = self.entry_user.get().strip()
         if custom_user == "Nome Utente Windows (opzionale)":
             custom_user = ""
         custom_pwd = self.entry_pwd.get()
         save_pwd = self.var_save_pass.get()
 
-        # If user explicitly entered a password in the options box
+        effective_user = custom_user or (host_info.get("username") or "").strip()
+
+        # Caso A: Credenziali fornite o salvate
         if custom_pwd:
-            self._do_connect(host_key, username=custom_user, password=custom_pwd, save_password=save_pwd)
+            self._do_connect(host_key, username=effective_user, password=custom_pwd, save_password=save_pwd, is_uncredentialed=False, attempt=1)
             return
 
-        # If host has no saved password and options box was empty, open credential dialog
-        if not has_pwd:
-            self.open_credentials_dialog(host_key, host_info)
+        if has_pwd:
+            self._do_connect(host_key, username=effective_user or None, password=None, save_password=False, is_uncredentialed=False, attempt=1)
             return
 
-        # Connect directly using stored password
-        self._do_connect(host_key, username=custom_user or None, password=None, save_password=False)
+        # Caso B: Username e password non configurati
+        # 1. Tentare comunque la connessione RDP senza credenziali preimpostate
+        self._do_connect(host_key, username=effective_user or None, password=None, save_password=False, is_uncredentialed=True, attempt=1)
 
-    def _do_connect(self, host_key, username=None, password=None, save_password=False):
+    def _do_connect(self, host_key, username=None, password=None, save_password=False, is_uncredentialed=False, attempt=1):
         host_name = self.hosts_data.get(host_key, {}).get("name") or host_key
-        
+        self._active_connect_params = {
+            "host_key": host_key,
+            "host_name": host_name,
+            "username": username,
+            "password": password,
+            "save_password": save_password,
+            "is_uncredentialed": is_uncredentialed,
+            "attempt": attempt
+        }
+
         # Show connection overlay
         self.lbl_conn_title.config(text=f"Connessione a {host_name}...")
+        sub_text = "Avvio sessione FreeRDP via Tailscale" if is_uncredentialed else f"Verifica credenziali e avvio sessione (Tentativo {attempt} di 3)"
+        self.lbl_conn_sub.config(text=sub_text)
         self.conn_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.conn_overlay.lift()
 
@@ -838,7 +936,20 @@ class NativeLauncherApp:
         if not res.get("success"):
             self.conn_overlay.place_forget()
             err_msg = res.get("message", "Errore sconosciuto")
-            messagebox.showerror("Errore Connessione RDP", f"Impossibile connettersi a {host_name}:\n{err_msg}")
+            params = getattr(self, "_active_connect_params", {}) or {}
+            host_key = params.get("host_key") or self._get_selected_host_key()
+            host_info = self.hosts_data.get(host_key, {})
+            is_uncred = params.get("is_uncredentialed", False)
+            attempt = params.get("attempt", 1)
+
+            err_lower = err_msg.lower()
+            is_auth = any(k in err_lower for k in ["autenticazione", "password", "credenziali", "nla", "logon", "credentials", "auth"])
+            if is_auth or is_uncred:
+                alert_msg = None if (is_uncred and attempt == 1) else "Nome utente o password non corretti. Riprova."
+                cur_user = params.get("username") or host_info.get("username") or ""
+                self.open_credentials_dialog(host_key, host_info, alert_msg=alert_msg, prefill_user=cur_user, attempt=attempt)
+            else:
+                messagebox.showerror("Errore Connessione RDP", f"Impossibile connettersi a {host_name}:\n{err_msg}")
             return
 
         # Hide window for FreeRDP fullscreen
@@ -869,9 +980,33 @@ class NativeLauncherApp:
         self.root.deiconify()
         self.root.lift()
 
-        err = final_status.get("error_message")
-        if err:
-            messagebox.showwarning("Sessione Terminata", f"Sessione con {host_name} chiusa con errore:\n{err}")
+        params = getattr(self, "_active_connect_params", {}) or {}
+        host_key = params.get("host_key") or self._get_selected_host_key()
+        host_info = self.hosts_data.get(host_key, {})
+        is_uncred = params.get("is_uncredentialed", False)
+        attempt = params.get("attempt", 1)
+
+        err = final_status.get("error") or final_status.get("error_message")
+        is_auth = final_status.get("is_auth_error", False)
+
+        if is_auth or (is_uncred and err):
+            # Caso B.3: Schermata locale per inserire credenziali
+            if attempt < 3:
+                alert_msg = None if (is_uncred and attempt == 1) else "Nome utente o password non corretti. Riprova."
+                cur_user = params.get("username") or host_info.get("username") or ""
+                self.open_credentials_dialog(host_key, host_info, alert_msg=alert_msg, prefill_user=cur_user, attempt=attempt)
+            else:
+                messagebox.showerror(
+                    "Autenticazione Fallita",
+                    f"Numero massimo di tentativi raggiunto per {host_name} (3 di 3). Verifica nome utente e password."
+                )
+        elif err:
+            messagebox.showwarning("Sessione Terminata", f"Sessione con {host_name} chiusa:\n{err}")
+
+        # If credentials were saved successfully, clear draft
+        if not err and params.get("save_password"):
+            if host_key in self.transient_drafts:
+                del self.transient_drafts[host_key]
 
         self.refresh_all(force=True)
 
@@ -1035,7 +1170,9 @@ class NativeLauncherApp:
             h_card.pack(fill=tk.X, pady=4)
 
             is_def = (key == self.default_host_key)
-            title = f"{h.get('name') or key} ({h.get('hostname') or h.get('ip')}:{h.get('port', 3389)})"
+            has_pwd = bool(h.get("has_password"))
+            pwd_tag = " 🔒" if has_pwd else ""
+            title = f"{h.get('name') or key}{pwd_tag} ({h.get('hostname') or h.get('ip')})"
             tk.Label(h_card, text=title, font=self.font_dropdown, fg=COLOR_TEXT_MAIN, bg=COLOR_INNER_BOX).pack(side=tk.LEFT)
 
             if is_def:
@@ -1053,9 +1190,97 @@ class NativeLauncherApp:
                     command=lambda k=key: [self._api_post("/api/hosts/set-default", {"key": k}), dialog.destroy(), self.refresh_all(force=True)]
                 ).pack(side=tk.RIGHT, padx=6)
 
+            tk.Button(
+                h_card,
+                text="Modifica",
+                font=self.font_status_sub,
+                fg=COLOR_TEXT_MAIN,
+                bg=COLOR_BTN_SECONDARY,
+                relief=tk.FLAT,
+                bd=0,
+                cursor="hand2",
+                command=lambda k=key, hinfo=h: [dialog.destroy(), self.open_host_edit_dialog(k, hinfo)]
+            ).pack(side=tk.RIGHT, padx=6)
+
         btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=20, pady=12)
         btn_box.pack(fill=tk.X)
+        tk.Button(btn_box, text="+ Aggiungi Nuovo PC", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=14, pady=6, command=lambda: [dialog.destroy(), self.open_host_edit_dialog("", {})]).pack(side=tk.LEFT)
         tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(side=tk.RIGHT)
+
+    def open_host_edit_dialog(self, key, host_info):
+        """Allows configuring or modifying a remote host including saved credentials."""
+        dialog = tk.Toplevel(self.root)
+        is_new = not bool(key)
+        dialog.title("Aggiungi Nuovo PC" if is_new else f"Modifica {host_info.get('name') or key}")
+        dialog.geometry("500x480")
+        dialog.configure(bg=COLOR_CARD)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        self._center_window(dialog, 500, 480)
+
+        tk.Label(dialog, text="Aggiungi Nuovo PC" if is_new else f"Modifica {host_info.get('name') or key}", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 12))
+
+        form = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
+        form.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(form, text="Nome Visualizzato:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        entry_name = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
+        entry_name.insert(0, host_info.get("name") or "")
+        entry_name.pack(fill=tk.X, pady=(2, 8), ipady=3)
+
+        tk.Label(form, text="Hostname MagicDNS / Tailscale:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        entry_host = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
+        entry_host.insert(0, host_info.get("hostname") or "")
+        entry_host.pack(fill=tk.X, pady=(2, 8), ipady=3)
+
+        tk.Label(form, text="Nome Utente Windows predefinito:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        entry_user = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
+        entry_user.insert(0, host_info.get("username") or "")
+        entry_user.pack(fill=tk.X, pady=(2, 8), ipady=3)
+
+        tk.Label(form, text="Password Windows salvata:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        entry_pass = tk.Entry(form, font=self.font_dropdown, show="●", bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
+        entry_pass.pack(fill=tk.X, pady=(2, 6), ipady=3)
+
+        var_clear_pwd = tk.BooleanVar(value=False)
+        if host_info.get("has_password"):
+            tk.Label(form, text="🔒 Password salvata presente. Lascia vuoto per mantenerla.", font=self.font_link, fg=COLOR_SUCCESS, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+            tk.Checkbutton(form, text="Elimina password salvata", variable=var_clear_pwd, font=self.font_link, fg="#f87171", bg=COLOR_CARD, selectcolor=COLOR_INNER_BOX).pack(anchor="w", pady=(2, 6))
+
+        var_is_def = tk.BooleanVar(value=(key == self.default_host_key))
+        tk.Checkbutton(form, text="Imposta come PC predefinito all'avvio", variable=var_is_def, font=self.font_link, fg=COLOR_TEXT_MAIN, bg=COLOR_CARD, selectcolor=COLOR_INNER_BOX).pack(anchor="w", pady=(6, 12))
+
+        def save_host():
+            nm = entry_name.get().strip()
+            hn = entry_host.get().strip()
+            un = entry_user.get().strip()
+            pw = entry_pass.get()
+            cp = var_clear_pwd.get()
+            is_d = var_is_def.get()
+            if not nm or not hn:
+                messagebox.showwarning("Dati incompleti", "Inserisci Nome e Hostname del computer.")
+                return
+
+            host_key_val = key or hn.lower().replace(" ", "-")
+            res = self._api_post("/api/hosts/save", {
+                "key": host_key_val,
+                "name": nm,
+                "hostname": hn,
+                "username": un,
+                "password": pw,
+                "clear_password": cp,
+                "is_default": is_d
+            })
+            if res.get("success"):
+                dialog.destroy()
+                self.refresh_all(force=True)
+            else:
+                messagebox.showerror("Errore", f"Impossibile salvare:\n{res.get('message')}")
+
+        btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=24, pady=12)
+        btn_box.pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Button(btn_box, text="Annulla", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
+        tk.Button(btn_box, text="Salva Configurazione", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_host).pack(side=tk.RIGHT)
 
     def open_diagnostics_dialog(self):
         """Displays diagnostics: ping, system metrics, Tailscale, FS."""
@@ -1201,48 +1426,171 @@ class NativeLauncherApp:
         tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
         tk.Button(btn_box, text="Salva e Applica", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_and_apply).pack(side=tk.RIGHT)
 
-    def open_credentials_dialog(self, host_key, host_info):
-        """Modal credentials prompt when password is missing or requested."""
+    def open_credentials_dialog(self, host_key, host_info, alert_msg=None, prefill_user=None, attempt=1):
+        """Modal credentials prompt compliant with Section 4:
+        Connessione RDP – [Nome PC selezionato]
+        - Username: campo di testo
+        - Password: campo protetto
+        - Salva credenziali: checkbox, inizialmente non selezionata
+        - Connetti: pulsante per avviare la sessione
+        - Annulla: pulsante per tornare alla schermata precedente
+        """
         dialog = tk.Toplevel(self.root)
-        dialog.title("Credenziali Windows")
-        dialog.geometry("450x330")
+        host_name = host_info.get("name") or host_key
+        dialog.title(f"Connessione RDP – {host_name}")
+        dialog.geometry("480x380")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
-        self._center_window(dialog, 450, 330)
+        self._center_window(dialog, 480, 380)
 
-        tk.Label(dialog, text=f"Accesso a {host_info.get('name') or host_key}", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 4))
-        tk.Label(dialog, text="Inserisci le credenziali Windows per connetterti", font=self.font_link, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD).pack(pady=(0, 16))
+        tk.Label(
+            dialog,
+            text=f"Connessione RDP – {host_name}",
+            font=self.font_modal_title,
+            fg=COLOR_TITLE_CYAN,
+            bg=COLOR_CARD
+        ).pack(pady=(16, 4))
 
-        form = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
+        if alert_msg:
+            tk.Label(
+                dialog,
+                text=f"⚠️ {alert_msg}",
+                font=self.font_link,
+                fg="#f87171",
+                bg=COLOR_CARD
+            ).pack(pady=(0, 10))
+        else:
+            tk.Label(
+                dialog,
+                text="Inserisci le credenziali Windows per connetterti",
+                font=self.font_link,
+                fg=COLOR_TEXT_MUTED,
+                bg=COLOR_CARD
+            ).pack(pady=(0, 12))
+
+        form = tk.Frame(dialog, bg=COLOR_CARD, padx=28)
         form.pack(fill=tk.X)
 
-        tk.Label(form, text="Nome Utente:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
-        entry_u = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
-        entry_u.insert(0, host_info.get("username") or "")
+        tk.Label(
+            form,
+            text="Username:",
+            font=self.font_status_label,
+            fg=COLOR_TEXT_MUTED,
+            bg=COLOR_CARD,
+            anchor="w"
+        ).pack(fill=tk.X)
+
+        entry_u = tk.Entry(
+            form,
+            font=self.font_dropdown,
+            bg=COLOR_INNER_BOX,
+            fg=COLOR_TEXT_MAIN,
+            insertbackground=COLOR_TEXT_MAIN,
+            bd=1,
+            relief=tk.FLAT
+        )
+        init_user = prefill_user or host_info.get("username") or ""
+        if init_user:
+            entry_u.insert(0, init_user)
         entry_u.pack(fill=tk.X, pady=(2, 10), ipady=4)
 
-        tk.Label(form, text="Password:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
-        entry_p = tk.Entry(form, font=self.font_dropdown, show="●", bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
+        tk.Label(
+            form,
+            text="Password:",
+            font=self.font_status_label,
+            fg=COLOR_TEXT_MUTED,
+            bg=COLOR_CARD,
+            anchor="w"
+        ).pack(fill=tk.X)
+
+        entry_p = tk.Entry(
+            form,
+            font=self.font_dropdown,
+            show="●",
+            bg=COLOR_INNER_BOX,
+            fg=COLOR_TEXT_MAIN,
+            insertbackground=COLOR_TEXT_MAIN,
+            bd=1,
+            relief=tk.FLAT
+        )
         entry_p.pack(fill=tk.X, pady=(2, 10), ipady=4)
 
-        var_s = tk.BooleanVar(value=True)
-        tk.Checkbutton(form, text="Salva password sul thin client", variable=var_s, font=self.font_link, fg=COLOR_TEXT_MAIN, bg=COLOR_CARD, selectcolor=COLOR_INNER_BOX).pack(anchor="w", pady=(0, 14))
+        # Salva credenziali: checkbox, inizialmente NON selezionata (False)
+        var_s = tk.BooleanVar(value=False)
+        chk_s = tk.Checkbutton(
+            form,
+            text="Salva credenziali",
+            variable=var_s,
+            font=self.font_link,
+            fg=COLOR_TEXT_MAIN,
+            bg=COLOR_CARD,
+            activebackground=COLOR_CARD,
+            activeforeground=COLOR_TEXT_MAIN,
+            selectcolor=COLOR_INNER_BOX
+        )
+        chk_s.pack(anchor="w", pady=(0, 16))
 
         def submit():
             u = entry_u.get().strip()
             p = entry_p.get()
             s = var_s.get()
             dialog.destroy()
-            self._do_connect(host_key, username=u, password=p, save_password=s)
+            self._do_connect(
+                host_key,
+                username=u,
+                password=p,
+                save_password=s,
+                is_uncredentialed=False,
+                attempt=attempt + 1
+            )
 
-        btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
-        btn_box.pack(fill=tk.X)
-        tk.Button(btn_box, text="Annulla", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
-        tk.Button(btn_box, text="CONNETTI", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=submit).pack(side=tk.RIGHT)
+        def cancel():
+            dialog.destroy()
+
+        btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=28)
+        btn_box.pack(fill=tk.X, pady=(4, 0))
+
+        tk.Button(
+            btn_box,
+            text="Annulla",
+            font=self.font_btn_action,
+            fg=COLOR_TEXT_MAIN,
+            bg=COLOR_BTN_SECONDARY,
+            activeforeground=COLOR_TEXT_MAIN,
+            activebackground=COLOR_BTN_SECONDARY_HOVER,
+            relief=tk.FLAT,
+            bd=0,
+            cursor="hand2",
+            padx=18,
+            pady=8,
+            command=cancel
+        ).pack(side=tk.LEFT)
+
+        tk.Button(
+            btn_box,
+            text="Connetti",
+            font=self.font_btn_action,
+            fg="#ffffff",
+            bg=COLOR_BTN_CONNECT,
+            activeforeground="#ffffff",
+            activebackground=COLOR_BTN_CONNECT_HOVER,
+            relief=tk.FLAT,
+            bd=0,
+            cursor="hand2",
+            padx=22,
+            pady=8,
+            command=submit
+        ).pack(side=tk.RIGHT)
 
         entry_p.bind("<Return>", lambda e: submit())
-        entry_p.focus_set()
+        entry_u.bind("<Return>", lambda e: entry_p.focus_set())
+        dialog.bind("<Escape>", lambda e: cancel())
+
+        if init_user:
+            entry_p.focus_set()
+        else:
+            entry_u.focus_set()
 
     # --- System Actions (Reboot / Poweroff) ---
 

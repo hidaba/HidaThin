@@ -5,6 +5,46 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/),
 e questo progetto segue il versionamento `0.2.x`.
 
+## [0.2.27] - 2026-11-21
+
+### Risolto
+- **Correzione Bug Ripristino Automatico Selezione PC Remoto (`app/launcher.py`, `templates/index.html`, `tests/test_launcher_ui.py`)**:
+  - Risolta la causa principale del cambio automatico del PC remoto selezionato: il polling periodico di stato (`_periodic_status_poll` a intervalli di 8 secondi in `app/launcher.py`) invocava `_apply_data()`, il quale ricalcolava l'indice selezionato forzandolo esclusivamente all'host predefinito (`selected_index = default_host_index`).
+  - Introdotto il tracking persistente della selezione attiva dell'utente (`self.selected_host_key`): i cicli di polling e refresh di sfondo preservano rigorosamente il PC selezionato dall'operatore.
+  - Salvaguardia dei campi di input durante la digitazione: l'aggiornamento automatico dei dati non sovrascrive né cancella username, password o checkbox durante la modifica.
+  - Caricamento dinamico e isolamento credenziali al cambio host: quando l'utente seleziona esplicitamente un altro PC dal menu a tendina, vengono caricate le relative credenziali salvate (senza esporre o ereditare la password del PC precedente), preservando in un registro bozze temporaneo le eventuali credenziali non salvate già digitate per ciascun host.
+  - Integrata la medesima persistenza a bozze (`hostDrafts`) e protezione da deselezione anche nella dashboard web (`templates/index.html`).
+  - Aggiunti test di regressione dedicati in `tests/test_launcher_ui.py` che simulano la digitazione prolungata oltre 30 secondi con polling concorrente.
+
+### Perfezionato
+- **Gestione Connessione RDP Senza Credenziali Preconfigurate (Caso A / Caso B) (`app/rdp.py`, `app/launcher.py`, `templates/index.html`, `tests/test_rdp_auth_retry.py`)**:
+  - Rimosso il blocco preventivo che impediva la pressione del tasto **Connetti** in assenza di username/password.
+  - **Caso A (Credenziali salvate o inserite)**: la connessione RDP viene avviata normalmente con le credenziali associate al PC selezionato.
+  - **Caso B (Username e password non configurati)**:
+    1. Il client RDP avvia comunque il tentativo di connessione senza credenziali preimpostate.
+    2. Se il server supporta l'autenticazione interattiva (es. schermata di logon nativa Windows senza NLA rigido), la sessione viene visualizzata a schermo intero consentendo all'utente di autenticarsi direttamente.
+    3. Se il client termina o richiede obbligatoriamente credenziali (errore NLA/autenticazione), viene visualizzata la finestra locale conforme alle specifiche:
+       - Titolo: `Connessione RDP – [Nome PC selezionato]`
+       - Campo di testo per Username
+       - Campo protetto per Password
+       - Checkbox `Salva credenziali`, **inizialmente non selezionata**
+       - Pulsanti `Connetti` e `Annulla`
+    4. Se l'utente seleziona `Salva credenziali`, i dati vengono memorizzati in modo persistente e sicuro (file YAML protetto con permessi 0600 sulla partizione dati) per quel singolo PC remoto, senza modificare l'host predefinito. Se non selezionata, le credenziali vengono utilizzate esclusivamente per la sessione corrente.
+    5. In caso di errore di autenticazione, viene consentito di correggere le credenziali e riprovare (fino a 3 tentativi) prima di ripristinare la schermata principale.
+    6. Se l'utente preme `Annulla` o `Esc`, la finestra si chiude ritornando al menu principale senza alterare le impostazioni salvate.
+  - Aggiornato il gestore di sessione RDP (`app/rdp.py`) per identificare in modo affidabile la richiesta di credenziali anche in assenza di codici di errore espliciti quando FreeRDP termina senza password.
+
+### Aggiunto
+- **Client RDP Nativo Zero-Copy `hidathin-rdp` con Architettura WTware (`src/hidathin_rdp.c`, `src/Makefile`, `app/rdp.py`, `install.sh`, `scripts/deploy-thinclient.ps1`)**:
+  - Sviluppato e integrato il client C nativo `hidathin-rdp` (`/usr/local/bin/hidathin-rdp`, compilato con `-O3 -mcpu=native -ftree-vectorize`) basato sull'architettura estratta da `/sbin/rdpclient` e `/usr/lib/ui32.so` di WTware 6.2.92:
+    1. **Zero-Copy Shared Memory Framebuffer (`MIT-SHM` + `gdi_init_ex`)**: alloca un segmento di memoria condivisa System V `XRGB8888` a 32-bit allineato a 64 byte per ARM64 NEON e lo passa direttamente a `gdi_init_ex(instance, PIXEL_FORMAT_BGRX32, ...)`, permettendo ai decoder GDI/ClearCodec/Planar/AVC444 di scrivere direttamente nel buffer condiviso con Xorg ed eliminando le 3 copie intermedie (`GDI -> XImage -> Pixmap -> Window`) di `xfreerdp3`.
+    2. **Dirty-Buffer Coalescing (`dirtybuf.cpp`) + Sincronizzazione `XShmCompletionEvent`**: fonde tutti i micro-rettangoli invalidati da ciascun PDU in una regione dirty unificata e presenta i frame tramite DMA `XShmPutImage` sincronizzato all'evento `XShmCompletionEvent`, azzerando la saturazione del socket X11 e il tearing.
+    3. **Mouse Motion Event Coalescing (`tsclient-input.cpp`)**: comprime le raffiche di eventi `MotionNotify` in coda nel server X11 in un singolo pacchetto FastPath `PTR_FLAGS_MOVE`, eliminando l'effetto scia/latenza del puntatore con polling USB a 500 Hz.
+    4. **Hardware DRM Cursor Plane (`Xcursor` ARGB32)** e **Traduzione Nativa Scancode WinPR XKB**: rendering locale del cursore hardware a 500 Hz e mappatura diretta dei keycode XKB.
+    5. **Tuning Diretto Socket TCP (`rdpclient-transport-tcp.cpp`)**: applica `TCP_NODELAY=1`, `SO_RCVBUF=65536` (64 KB anti-bufferbloat), `SO_KEEPALIVE=1` (15s/5s/3) e `TCP_USER_TIMEOUT=30000` direttamente sui file descriptor del trasporto RDP.
+  - Aggiornato `RDPManager._find_freerdp_binary()` in `app/rdp.py` per selezionare prioritariamente `hidathin-rdp` con fallback trasparente a `xfreerdp3`.
+  - Aggiornati `install.sh` e `scripts/deploy-thinclient.ps1` per compilare e installare automaticamente `/usr/local/bin/hidathin-rdp`.
+
 ## [0.2.26] - 2026-11-20
 
 ### Ottimizzato (Tuning RDP & Sistema Derivato da Reverse-Engineering WTware 6.2.92)

@@ -262,3 +262,7 @@ def test_t30_rdp_cleartype_fonts_and_profile_tuning():
         assert "-window-drag" in args
 
         manager.disconnect()
+
+    # 4. Priority selection of native WTware-style hidathin-rdp binary when available
+    with patch("shutil.which", side_effect=lambda c: "/usr/local/bin/hidathin-rdp" if "hidathin-rdp" in c else "/usr/bin/xfreerdp3"):
+        assert manager._find_freerdp_binary() == "/usr/local/bin/hidathin-rdp"
