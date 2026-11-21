@@ -51,6 +51,7 @@ GEMINI.md
 AGENTS.md
 *.ai.md
 *opencode*
+*prompt*
 .cursor/
 .cursorrules
 .windsurf/
