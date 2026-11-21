@@ -25,6 +25,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from app import __version__
+from app.i18n import t, get_current_language, LANGUAGE_OPTIONS, DEFAULT_LANGUAGE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [launcher] %(levelname)s: %(message)s")
 logger = logging.getLogger("launcher")
@@ -59,6 +60,7 @@ class NativeLauncherApp:
         self.root.configure(bg=COLOR_BG)
 
         # State data
+        self.lang = get_current_language()
         self.hosts_data = {}
         self.default_host_key = ""
         self.host_keys_order = []
@@ -113,6 +115,60 @@ class NativeLauncherApp:
 
         # Timers
         self.root.after(5000, self._periodic_status_poll)
+
+    def tr(self, key, **kwargs):
+        """Translates a key into the launcher's current active language."""
+        return t(key, lang=self.lang, **kwargs)
+
+    def update_ui_language(self):
+        """Updates all visible label and button texts across the main window."""
+        if hasattr(self, 'lbl_badge_wifi'):
+            lan_ip = self.system_status.get("network", {}).get("primary_ip") or "--"
+            wf = self.system_status.get("network", {}).get("wifi", {})
+            if not wf.get("connected"):
+                self.lbl_badge_wifi.config(text=f"● Wi-Fi: {self.tr('badge_disconnected')}")
+        if hasattr(self, 'lbl_badge_ts'):
+            ts = self.system_status.get("tailscale", {})
+            if not ts.get("connected"):
+                self.lbl_badge_ts.config(text=f"● Tailscale: {self.tr('badge_disconnected')}")
+        if hasattr(self, 'lbl_wf_title'):
+            self.lbl_wf_title.config(text=self.tr("status_wifi_caps"))
+        if hasattr(self, 'lbl_ts_title'):
+            self.lbl_ts_title.config(text=self.tr("status_ts_caps"))
+        if hasattr(self, 'lbl_sel'):
+            self.lbl_sel.config(text=self.tr("select_remote_pc"))
+        if hasattr(self, 'btn_set_default'):
+            self._update_default_button_state()
+        if hasattr(self, 'btn_toggle_cred'):
+            self.btn_toggle_cred.config(
+                text=self.tr("cred_toggle_up") if self.credentials_expanded else self.tr("cred_toggle_down")
+            )
+        if hasattr(self, 'chk_save_pass'):
+            self.chk_save_pass.config(text=self.tr("save_pass_thinclient"))
+        if hasattr(self, 'btn_connect'):
+            self.btn_connect.config(text=self.tr("btn_connect_caps"))
+        if hasattr(self, 'btn_nav_wifi'):
+            self.btn_nav_wifi.config(text=self.tr("boot_btn_wifi"))
+        if hasattr(self, 'btn_nav_hosts'):
+            self.btn_nav_hosts.config(text=self.tr("nav_hosts"))
+        if hasattr(self, 'btn_nav_diag'):
+            self.btn_nav_diag.config(text=self.tr("nav_diagnostics"))
+        if hasattr(self, 'btn_nav_reboot'):
+            self.btn_nav_reboot.config(text=self.tr("btn_reboot"))
+        if hasattr(self, 'btn_nav_poweroff'):
+            self.btn_nav_poweroff.config(text=self.tr("btn_poweroff"))
+        if hasattr(self, 'lbl_conn_title') and not self.direct_rdp_timer:
+            self.lbl_conn_title.config(text=self.tr("connecting_title"))
+        if hasattr(self, 'lbl_conn_sub'):
+            self.lbl_conn_sub.config(text=self.tr("connecting_sub"))
+        if hasattr(self, 'btn_conn_cancel'):
+            self.btn_conn_cancel.config(text=self.tr("btn_cancel"))
+        if hasattr(self, 'footer_nav_buttons'):
+            nav_keys = ["nav_home", "nav_wifi", "nav_hosts", "nav_diagnostics", "nav_settings"]
+            for btn, k in zip(self.footer_nav_buttons, nav_keys):
+                btn.config(text=self.tr(k))
+        if self.system_status:
+            self._apply_data(self.system_status, self.hosts_data, self.default_host_key, initial=False)
 
     def _setup_ttk_styles(self):
         self.style = ttk.Style()
@@ -203,7 +259,7 @@ class NativeLauncherApp:
 
         self.lbl_badge_wifi = tk.Label(
             self.badge_wifi_frame,
-            text="● Wi-Fi: Verifica...",
+            text=f"● Wi-Fi: {self.tr('badge_checking')}",
             font=self.font_badge,
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_CARD
@@ -225,7 +281,7 @@ class NativeLauncherApp:
 
         self.lbl_badge_ts = tk.Label(
             self.badge_ts_frame,
-            text="● Tailscale: Verifica...",
+            text=f"● Tailscale: {self.tr('badge_checking')}",
             font=self.font_badge,
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_CARD,
@@ -281,8 +337,8 @@ class NativeLauncherApp:
         )
         self.box_wifi.grid(row=0, column=0, padx=(0, 10), sticky="nsew")
 
-        lbl_wf_title = tk.Label(self.box_wifi, text="STATO WI-FI", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX)
-        lbl_wf_title.pack()
+        self.lbl_wf_title = tk.Label(self.box_wifi, text=self.tr("status_wifi_caps"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX)
+        self.lbl_wf_title.pack()
 
         self.lbl_wifi_val = tk.Label(self.box_wifi, text="--", font=self.font_status_val, fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX)
         self.lbl_wifi_val.pack(pady=(2, 2))
@@ -303,9 +359,9 @@ class NativeLauncherApp:
         self.box_ts.config(cursor="hand2")
         self.box_ts.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
-        lbl_ts_title = tk.Label(self.box_ts, text="STATO TAILSCALE", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX, cursor="hand2")
-        lbl_ts_title.pack()
-        lbl_ts_title.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
+        self.lbl_ts_title = tk.Label(self.box_ts, text=self.tr("status_ts_caps"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX, cursor="hand2")
+        self.lbl_ts_title.pack()
+        self.lbl_ts_title.bind("<Button-1>", lambda e: self.open_settings_dialog(initial_tab="tailscale"))
 
         self.lbl_ts_val = tk.Label(self.box_ts, text="--", font=self.font_status_val, fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX, cursor="hand2")
         self.lbl_ts_val.pack(pady=(2, 2))
@@ -326,18 +382,18 @@ class NativeLauncherApp:
         sel_header = tk.Frame(self.selector_box, bg=COLOR_CARD)
         sel_header.pack(fill=tk.X, pady=(0, 8))
 
-        lbl_sel = tk.Label(
+        self.lbl_sel = tk.Label(
             sel_header,
-            text="Seleziona Computer Remoto:",
+            text=self.tr("select_remote_pc"),
             font=self.font_selector_label,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_CARD
         )
-        lbl_sel.pack(side=tk.LEFT)
+        self.lbl_sel.pack(side=tk.LEFT)
 
         self.btn_set_default = tk.Button(
             sel_header,
-            text="★ Imposta come predefinito",
+            text=self.tr("set_as_default"),
             font=self.font_link,
             fg=COLOR_LINK,
             bg=COLOR_CARD,
@@ -365,7 +421,7 @@ class NativeLauncherApp:
         # C. Windows Options Toggle Link (Collapsible)
         self.btn_toggle_cred = tk.Button(
             self.card_main,
-            text="Opzioni accesso Windows (opzionale) ▼",
+            text=self.tr("cred_toggle_down"),
             font=self.font_link,
             fg=COLOR_LINK,
             bg=COLOR_CARD,
@@ -399,7 +455,7 @@ class NativeLauncherApp:
             relief=tk.FLAT
         )
         self.entry_user.pack(fill=tk.X, pady=(0, 8), ipady=4)
-        self._set_placeholder(self.entry_user, "Nome Utente Windows (opzionale)")
+        self._set_placeholder(self.entry_user, self.tr("cred_user_placeholder"))
 
         self.entry_pwd = tk.Entry(
             self.cred_container,
@@ -416,7 +472,7 @@ class NativeLauncherApp:
         self.var_save_pass = tk.BooleanVar(value=False)
         self.chk_save_pass = tk.Checkbutton(
             self.cred_container,
-            text="Salva la password sul thin client",
+            text=self.tr("save_pass_thinclient"),
             variable=self.var_save_pass,
             font=self.font_link,
             fg=COLOR_TEXT_MUTED,
@@ -430,7 +486,7 @@ class NativeLauncherApp:
         # D. Giant Green "CONNETTI" Button
         self.btn_connect = tk.Button(
             self.card_main,
-            text="CONNETTI",
+            text=self.tr("btn_connect_caps"),
             font=self.font_btn_connect,
             fg="#ffffff",
             bg=COLOR_BTN_CONNECT,
@@ -456,9 +512,9 @@ class NativeLauncherApp:
         self.nav_grid.columnconfigure(2, weight=1, uniform="nav")
 
         # Row 1: Configura Wi-Fi, Gestisci PC, Diagnostica
-        btn_w = tk.Button(
+        self.btn_nav_wifi = tk.Button(
             self.nav_grid,
-            text="Configura Wi-Fi",
+            text=self.tr("boot_btn_wifi"),
             font=self.font_btn_action,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY,
@@ -470,11 +526,11 @@ class NativeLauncherApp:
             pady=9,
             command=self.open_wifi_dialog
         )
-        btn_w.grid(row=0, column=0, padx=4, pady=4, sticky="nsew")
+        self.btn_nav_wifi.grid(row=0, column=0, padx=4, pady=4, sticky="nsew")
 
-        btn_h = tk.Button(
+        self.btn_nav_hosts = tk.Button(
             self.nav_grid,
-            text="Gestisci PC",
+            text=self.tr("nav_hosts"),
             font=self.font_btn_action,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY,
@@ -486,11 +542,11 @@ class NativeLauncherApp:
             pady=9,
             command=self.open_hosts_manager
         )
-        btn_h.grid(row=0, column=1, padx=4, pady=4, sticky="nsew")
+        self.btn_nav_hosts.grid(row=0, column=1, padx=4, pady=4, sticky="nsew")
 
-        btn_d = tk.Button(
+        self.btn_nav_diag = tk.Button(
             self.nav_grid,
-            text="Diagnostica",
+            text=self.tr("nav_diagnostics"),
             font=self.font_btn_action,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY,
@@ -502,12 +558,12 @@ class NativeLauncherApp:
             pady=9,
             command=self.open_diagnostics_dialog
         )
-        btn_d.grid(row=0, column=2, padx=4, pady=4, sticky="nsew")
+        self.btn_nav_diag.grid(row=0, column=2, padx=4, pady=4, sticky="nsew")
 
         # Row 2: Riavvia, Spegni (spanning cols)
-        btn_r = tk.Button(
+        self.btn_nav_reboot = tk.Button(
             self.nav_grid,
-            text="Riavvia",
+            text=self.tr("btn_reboot"),
             font=self.font_btn_action,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY,
@@ -519,11 +575,11 @@ class NativeLauncherApp:
             pady=9,
             command=self.confirm_reboot
         )
-        btn_r.grid(row=1, column=0, columnspan=1, padx=4, pady=(4, 0), sticky="nsew")
+        self.btn_nav_reboot.grid(row=1, column=0, columnspan=1, padx=4, pady=(4, 0), sticky="nsew")
 
-        btn_s = tk.Button(
+        self.btn_nav_poweroff = tk.Button(
             self.nav_grid,
-            text="Spegni",
+            text=self.tr("btn_poweroff"),
             font=self.font_btn_action,
             fg="#ffffff",
             bg=COLOR_BTN_DANGER,
@@ -535,7 +591,7 @@ class NativeLauncherApp:
             pady=9,
             command=self.confirm_poweroff
         )
-        btn_s.grid(row=1, column=1, columnspan=2, padx=4, pady=(4, 0), sticky="nsew")
+        self.btn_nav_poweroff.grid(row=1, column=1, columnspan=2, padx=4, pady=(4, 0), sticky="nsew")
 
         # F. Connection Overlay (Hidden by default, shown during connection)
         self.conn_overlay = tk.Frame(
@@ -548,7 +604,7 @@ class NativeLauncherApp:
 
         self.lbl_conn_title = tk.Label(
             self.conn_overlay,
-            text="Connessione in corso...",
+            text=self.tr("connecting_title"),
             font=self.font_modal_title,
             fg=COLOR_TITLE_CYAN,
             bg=COLOR_INNER_BOX
@@ -557,7 +613,7 @@ class NativeLauncherApp:
 
         self.lbl_conn_sub = tk.Label(
             self.conn_overlay,
-            text="Avvio FreeRDP via Tailscale",
+            text=self.tr("connecting_sub"),
             font=self.font_link,
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_INNER_BOX
@@ -566,7 +622,7 @@ class NativeLauncherApp:
 
         self.btn_conn_cancel = tk.Button(
             self.conn_overlay,
-            text="Annulla",
+            text=self.tr("btn_cancel"),
             font=self.font_btn_action,
             fg="#ffffff",
             bg=COLOR_BTN_CANCEL,
@@ -595,7 +651,7 @@ class NativeLauncherApp:
         # Left Info
         self.lbl_footer_info = tk.Label(
             self.footer_frame,
-            text="IP Locale: -- | Tailscale IP: --",
+            text=f"{self.tr('local_ip')}: -- | {self.tr('ts_ip')}: --",
             font=self.font_footer,
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_BG
@@ -607,13 +663,14 @@ class NativeLauncherApp:
         self.footer_nav_frame.pack(side=tk.RIGHT)
 
         nav_items = [
-            ("Home", lambda: self.refresh_all(force=True)),
-            ("Wi-Fi", self.open_wifi_dialog),
-            ("Gestisci PC", self.open_hosts_manager),
-            ("Diagnostica", self.open_diagnostics_dialog),
-            ("⚙ Impostazioni", self.open_settings_dialog)
+            (self.tr("nav_home"), lambda: self.refresh_all(force=True)),
+            (self.tr("nav_wifi"), self.open_wifi_dialog),
+            (self.tr("nav_hosts"), self.open_hosts_manager),
+            (self.tr("nav_diagnostics"), self.open_diagnostics_dialog),
+            (self.tr("nav_settings"), self.open_settings_dialog)
         ]
 
+        self.footer_nav_buttons = []
         for label, cmd in nav_items:
             btn_n = tk.Button(
                 self.footer_nav_frame,
@@ -631,6 +688,7 @@ class NativeLauncherApp:
                 command=cmd
             )
             btn_n.pack(side=tk.LEFT, padx=3)
+            self.footer_nav_buttons.append(btn_n)
 
     def _on_canvas_resize(self, event):
         cx = event.width // 2
@@ -661,12 +719,21 @@ class NativeLauncherApp:
 
     def toggle_credentials_box(self):
         self.credentials_expanded = not self.credentials_expanded
+        suffix = "▲" if self.credentials_expanded else "▼"
+        host_key = self._get_selected_host_key()
+        h_info = self.hosts_data.get(host_key, {})
+        has_saved_pwd = bool(h_info.get("has_password"))
         if self.credentials_expanded:
             self.cred_container.pack(fill=tk.X, pady=(0, 16), before=self.btn_connect)
-            self.btn_toggle_cred.config(text="Opzioni accesso Windows (opzionale) ▲")
         else:
             self.cred_container.pack_forget()
-            self.btn_toggle_cred.config(text="Opzioni accesso Windows (opzionale) ▼")
+
+        base_lbl = self.tr("cred_toggle_down").replace(" ▼", "")
+        if has_saved_pwd:
+            saved_label = "password salvata" if self.lang == "it" else "saved password"
+            self.btn_toggle_cred.config(text=f"{base_lbl} (🔒 {saved_label}) {suffix}")
+        else:
+            self.btn_toggle_cred.config(text=f"{base_lbl} {suffix}")
 
     # --- Data Refresh Worker ---
 
@@ -707,49 +774,62 @@ class NativeLauncherApp:
             ssid = wf.get("ssid")
             sig = wf.get("signal", 50)
             self.lbl_wifi_val.config(text=ssid, fg=COLOR_SUCCESS)
-            self.lbl_wifi_sub.config(text=f"Segnale: {sig}% | IP: {lan_ip}")
+            self.lbl_wifi_sub.config(text=f"{self.tr('status_signal')} {sig}% | IP: {lan_ip}")
             self.lbl_badge_wifi.config(text=f"● Wi-Fi: {ssid} ({lan_ip})", fg=COLOR_SUCCESS)
             self.badge_wifi_frame.config(highlightbackground=COLOR_BTN_CONNECT)
         elif eth.get("connected"):
-            self.lbl_wifi_val.config(text="Ethernet Cablata", fg=COLOR_SUCCESS)
+            eth_lbl = "Ethernet Cablata" if self.lang == "it" else "Wired Ethernet"
+            self.lbl_wifi_val.config(text=eth_lbl, fg=COLOR_SUCCESS)
             self.lbl_wifi_sub.config(text=f"IP: {lan_ip}")
             self.lbl_badge_wifi.config(text=f"● Ethernet: {lan_ip}", fg=COLOR_SUCCESS)
             self.badge_wifi_frame.config(highlightbackground=COLOR_BTN_CONNECT)
         else:
-            self.lbl_wifi_val.config(text="Disconnesso", fg=COLOR_TEXT_MUTED)
-            self.lbl_wifi_sub.config(text="Nessuna rete collegata")
-            self.lbl_badge_wifi.config(text="○ Rete: Disconnessa", fg=COLOR_BTN_CANCEL)
+            self.lbl_wifi_val.config(text=self.tr("badge_disconnected"), fg=COLOR_TEXT_MUTED)
+            self.lbl_wifi_sub.config(text=self.tr("status_no_local_net"))
+            self.lbl_badge_wifi.config(text=f"○ {self.tr('badge_disconnected')}", fg=COLOR_BTN_CANCEL)
             self.badge_wifi_frame.config(highlightbackground=COLOR_BTN_CANCEL)
 
         # Tailscale Status
         if ts.get("connected") and ts.get("ip"):
-            self.lbl_ts_val.config(text="CONNESSO", fg=COLOR_SUCCESS)
+            self.lbl_ts_val.config(text=self.tr("status_connected_caps"), fg=COLOR_SUCCESS)
             self.lbl_ts_sub.config(text=f"IP: {ts_ip}")
             self.lbl_badge_ts.config(text=f"● Tailscale: {ts_ip}", fg=COLOR_SUCCESS)
             self.badge_ts_frame.config(highlightbackground=COLOR_BTN_CONNECT)
         elif not ts.get("enabled", True):
-            self.lbl_ts_val.config(text="DISABILITATO", fg=COLOR_TEXT_MUTED)
-            self.lbl_ts_sub.config(text="Disattivato in Impostazioni")
-            self.lbl_badge_ts.config(text="○ Tailscale: Disabilitato", fg=COLOR_TEXT_MUTED)
+            ts_dis_caps = "DISABILITATO" if self.lang == "it" else "DISABLED"
+            ts_dis_sub = "Disattivato in Impostazioni" if self.lang == "it" else "Disabled in Settings"
+            ts_dis_bdg = "Disabilitato" if self.lang == "it" else "Disabled"
+            self.lbl_ts_val.config(text=ts_dis_caps, fg=COLOR_TEXT_MUTED)
+            self.lbl_ts_sub.config(text=ts_dis_sub)
+            self.lbl_badge_ts.config(text=f"○ Tailscale: {ts_dis_bdg}", fg=COLOR_TEXT_MUTED)
             self.badge_ts_frame.config(highlightbackground=COLOR_CARD_BORDER)
         elif ts.get("status") == "Autenticazione richiesta":
-            self.lbl_ts_val.config(text="ACCESSO RICHIESTO", fg="#f59e0b")
-            self.lbl_ts_sub.config(text="Apri Impostazioni per Login")
-            self.lbl_badge_ts.config(text="⚠ Tailscale: Accedi", fg="#f59e0b")
+            ts_auth_caps = "ACCESSO RICHIESTO" if self.lang == "it" else "LOGIN REQUIRED"
+            ts_auth_sub = "Apri Impostazioni per Login" if self.lang == "it" else "Open Settings to Log In"
+            ts_auth_bdg = "Accedi" if self.lang == "it" else "Log In"
+            self.lbl_ts_val.config(text=ts_auth_caps, fg="#f59e0b")
+            self.lbl_ts_sub.config(text=ts_auth_sub)
+            self.lbl_badge_ts.config(text=f"⚠ Tailscale: {ts_auth_bdg}", fg="#f59e0b")
             self.badge_ts_frame.config(highlightbackground="#f59e0b")
         elif ts.get("status") == "Connessione in corso":
-            self.lbl_ts_val.config(text="IN CORSO", fg=COLOR_TITLE_CYAN)
-            self.lbl_ts_sub.config(text="Connessione alla Tailnet...")
-            self.lbl_badge_ts.config(text="◌ Tailscale: In corso", fg=COLOR_TITLE_CYAN)
+            ts_prog_caps = "IN CORSO" if self.lang == "it" else "CONNECTING"
+            ts_prog_sub = "Connessione alla Tailnet..." if self.lang == "it" else "Connecting to Tailnet..."
+            ts_prog_bdg = "In corso" if self.lang == "it" else "Connecting"
+            self.lbl_ts_val.config(text=ts_prog_caps, fg=COLOR_TITLE_CYAN)
+            self.lbl_ts_sub.config(text=ts_prog_sub)
+            self.lbl_badge_ts.config(text=f"◌ Tailscale: {ts_prog_bdg}", fg=COLOR_TITLE_CYAN)
             self.badge_ts_frame.config(highlightbackground=COLOR_TITLE_CYAN)
         else:
-            self.lbl_ts_val.config(text="NON ATTIVO", fg=COLOR_BTN_CANCEL)
-            self.lbl_ts_sub.config(text="Verifica collegamento...")
-            self.lbl_badge_ts.config(text="○ Tailscale: Non attivo", fg=COLOR_BTN_CANCEL)
+            ts_inact_caps = self.tr("status_disconnected_caps")
+            ts_inact_sub = self.tr("status_check_conn")
+            ts_inact_bdg = self.tr("badge_disconnected")
+            self.lbl_ts_val.config(text=ts_inact_caps, fg=COLOR_BTN_CANCEL)
+            self.lbl_ts_sub.config(text=ts_inact_sub)
+            self.lbl_badge_ts.config(text=f"○ Tailscale: {ts_inact_bdg}", fg=COLOR_BTN_CANCEL)
             self.badge_ts_frame.config(highlightbackground=COLOR_CARD_BORDER)
 
         # Footer Status Info
-        self.lbl_footer_info.config(text=f"IP Locale: {lan_ip} | Tailscale IP: {ts_ip} • v{__version__}")
+        self.lbl_footer_info.config(text=f"{self.tr('local_ip')}: {lan_ip} | {self.tr('ts_ip')}: {ts_ip} • v{__version__}")
 
         # Update Host Combobox
         combo_values = []
@@ -819,7 +899,7 @@ class NativeLauncherApp:
             self.entry_user.insert(0, user_val)
             self.entry_user.config(fg=COLOR_TEXT_MAIN)
         else:
-            self.entry_user.insert(0, "Nome Utente Windows (opzionale)")
+            self.entry_user.insert(0, self.tr("cred_user_placeholder"))
             self.entry_user.config(fg=COLOR_TEXT_MUTED)
 
         self.entry_pwd.delete(0, tk.END)
@@ -829,10 +909,12 @@ class NativeLauncherApp:
         self.var_save_pass.set(save_val)
 
         suffix = "▲" if self.credentials_expanded else "▼"
+        base_lbl = self.tr("cred_toggle_down").replace(" ▼", "")
         if has_saved_pwd:
-            self.btn_toggle_cred.config(text=f"Opzioni accesso Windows (🔒 password salvata) {suffix}")
+            saved_label = "password salvata" if self.lang == "it" else "saved password"
+            self.btn_toggle_cred.config(text=f"{base_lbl} (🔒 {saved_label}) {suffix}")
         else:
-            self.btn_toggle_cred.config(text=f"Opzioni accesso Windows (opzionale) {suffix}")
+            self.btn_toggle_cred.config(text=f"{base_lbl} {suffix}")
 
     def _on_host_selected(self, event=None):
         sel_idx = self.host_combo.current()
@@ -845,7 +927,7 @@ class NativeLauncherApp:
             # Save draft for previously selected host
             if self.selected_host_key:
                 cur_u = self.entry_user.get().strip()
-                if cur_u == "Nome Utente Windows (opzionale)":
+                if cur_u in ("Nome Utente Windows (opzionale)", "Windows Username (optional)", self.tr("cred_user_placeholder")):
                     cur_u = ""
                 cur_p = self.entry_pwd.get()
                 cur_s = self.var_save_pass.get()
@@ -870,9 +952,10 @@ class NativeLauncherApp:
     def _update_default_button_state(self):
         cur_key = self._get_selected_host_key()
         if cur_key == self.default_host_key:
-            self.btn_set_default.config(text="★ Predefinito all'avvio", fg=COLOR_SUCCESS, state=tk.DISABLED)
+            def_text = "★ Predefinito all'avvio" if self.lang == "it" else "★ Default on boot"
+            self.btn_set_default.config(text=def_text, fg=COLOR_SUCCESS, state=tk.DISABLED)
         else:
-            self.btn_set_default.config(text="★ Imposta come predefinito", fg=COLOR_LINK, state=tk.NORMAL)
+            self.btn_set_default.config(text=self.tr("set_as_default"), fg=COLOR_LINK, state=tk.NORMAL)
 
     def set_current_host_as_default(self):
         cur_key = self._get_selected_host_key()
@@ -891,14 +974,18 @@ class NativeLauncherApp:
             self._update_default_button_state()
             logger.info(f"Host '{key}' set as default.")
         else:
-            messagebox.showerror("Errore", f"Impossibile impostare l'host predefinito:\n{res.get('message')}")
+            err_lbl = self.tr("modal_error")
+            fail_msg = f"Impossibile impostare l'host predefinito:\n{res.get('message')}" if self.lang == "it" else f"Could not set default host:\n{res.get('message')}"
+            messagebox.showerror(err_lbl, fail_msg)
 
     # --- Connection Execution ---
 
     def start_connection(self):
         host_key = self._get_selected_host_key()
         if not host_key:
-            messagebox.showwarning("Avviso", "Nessun host selezionato.")
+            notice_lbl = self.tr("modal_notice")
+            no_host_msg = "Nessun host selezionato." if self.lang == "it" else "No host selected."
+            messagebox.showwarning(notice_lbl, no_host_msg)
             return
 
         host_info = self.hosts_data.get(host_key, {})
@@ -906,7 +993,7 @@ class NativeLauncherApp:
 
         # Check credentials from options box
         custom_user = self.entry_user.get().strip()
-        if custom_user == "Nome Utente Windows (opzionale)":
+        if custom_user in ("Nome Utente Windows (opzionale)", "Windows Username (optional)", self.tr("cred_user_placeholder")):
             custom_user = ""
         custom_pwd = self.entry_pwd.get()
         save_pwd = self.var_save_pass.get()
@@ -939,8 +1026,12 @@ class NativeLauncherApp:
         }
 
         # Show connection overlay
-        self.lbl_conn_title.config(text=f"Connessione a {host_name}...")
-        sub_text = "Avvio sessione FreeRDP via Tailscale" if is_uncredentialed else f"Verifica credenziali e avvio sessione (Tentativo {attempt} di 3)"
+        conn_title = f"Connessione a {host_name}..." if self.lang == "it" else f"Connecting to {host_name}..."
+        self.lbl_conn_title.config(text=conn_title)
+        if is_uncredentialed:
+            sub_text = "Avvio sessione FreeRDP via Tailscale" if self.lang == "it" else "Launching FreeRDP session via Tailscale"
+        else:
+            sub_text = f"Verifica credenziali e avvio sessione (Tentativo {attempt} di 3)" if self.lang == "it" else f"Verifying credentials and launching session (Attempt {attempt} of 3)"
         self.lbl_conn_sub.config(text=sub_text)
         self.conn_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.conn_overlay.lift()
@@ -970,11 +1061,15 @@ class NativeLauncherApp:
             err_lower = err_msg.lower()
             is_auth = any(k in err_lower for k in ["autenticazione", "password", "credenziali", "nla", "logon", "credentials", "auth"])
             if is_auth or is_uncred:
-                alert_msg = None if (is_uncred and attempt == 1) else "Nome utente o password non corretti. Riprova."
+                alert_msg = None if (is_uncred and attempt == 1) else (
+                    "Nome utente o password non corretti. Riprova." if self.lang == "it" else "Invalid username or password. Please try again."
+                )
                 cur_user = params.get("username") or host_info.get("username") or ""
                 self.open_credentials_dialog(host_key, host_info, alert_msg=alert_msg, prefill_user=cur_user, attempt=attempt)
             else:
-                messagebox.showerror("Errore Connessione RDP", f"Impossibile connettersi a {host_name}:\n{err_msg}")
+                err_title = "Errore Connessione RDP" if self.lang == "it" else "RDP Connection Error"
+                err_text = f"Impossibile connettersi a {host_name}:\n{err_msg}" if self.lang == "it" else f"Unable to connect to {host_name}:\n{err_msg}"
+                messagebox.showerror(err_title, err_text)
             return
 
         # Session connecting in background: keep overlay active, do not withdraw launcher prematurely
@@ -1020,16 +1115,23 @@ class NativeLauncherApp:
         if is_auth or (is_uncred and err):
             # Caso B.3: Schermata locale per inserire credenziali
             if attempt < 3:
-                alert_msg = None if (is_uncred and attempt == 1) else "Nome utente o password non corretti. Riprova."
+                alert_msg = None if (is_uncred and attempt == 1) else (
+                    "Nome utente o password non corretti. Riprova." if self.lang == "it" else "Invalid username or password. Please try again."
+                )
                 cur_user = params.get("username") or host_info.get("username") or ""
                 self.open_credentials_dialog(host_key, host_info, alert_msg=alert_msg, prefill_user=cur_user, attempt=attempt)
             else:
-                messagebox.showerror(
-                    "Autenticazione Fallita",
+                fail_title = "Autenticazione Fallita" if self.lang == "it" else "Authentication Failed"
+                fail_msg = (
                     f"Numero massimo di tentativi raggiunto per {host_name} (3 di 3). Verifica nome utente e password."
+                    if self.lang == "it" else
+                    f"Maximum attempts reached for {host_name} (3 of 3). Please verify username and password."
                 )
+                messagebox.showerror(fail_title, fail_msg)
         elif err:
-            messagebox.showwarning("Sessione Terminata", f"Sessione con {host_name} chiusa:\n{err}")
+            ended_title = "Sessione Terminata" if self.lang == "it" else "Session Ended"
+            ended_msg = f"Sessione con {host_name} chiusa:\n{err}" if self.lang == "it" else f"Session with {host_name} closed:\n{err}"
+            messagebox.showwarning(ended_title, ended_msg)
 
         # If credentials were saved successfully, clear draft
         if not err and params.get("save_password"):
@@ -1047,8 +1149,10 @@ class NativeLauncherApp:
         self.auto_connect_remaining = 3
         default_name = self.hosts_data.get(self.default_host_key, {}).get("name") or self.default_host_key
 
-        self.lbl_conn_title.config(text=f"Avvio automatico verso '{default_name}' in {self.auto_connect_remaining}s...")
-        self.lbl_conn_sub.config(text="Premi 'Annulla' o Spazio per aprire il menu locale")
+        auto_title = f"Avvio automatico verso '{default_name}' in {self.auto_connect_remaining}s..." if self.lang == "it" else f"Auto-connecting to '{default_name}' in {self.auto_connect_remaining}s..."
+        auto_sub = "Premi 'Annulla' o Spazio per aprire il menu locale" if self.lang == "it" else "Press 'Cancel' or Space to open local menu"
+        self.lbl_conn_title.config(text=auto_title)
+        self.lbl_conn_sub.config(text=auto_sub)
         self.conn_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.conn_overlay.lift()
 
@@ -1060,7 +1164,8 @@ class NativeLauncherApp:
 
         if self.auto_connect_remaining > 0:
             default_name = self.hosts_data.get(self.default_host_key, {}).get("name") or self.default_host_key
-            self.lbl_conn_title.config(text=f"Avvio automatico verso '{default_name}' in {self.auto_connect_remaining}s...")
+            auto_title = f"Avvio automatico verso '{default_name}' in {self.auto_connect_remaining}s..." if self.lang == "it" else f"Auto-connecting to '{default_name}' in {self.auto_connect_remaining}s..."
+            self.lbl_conn_title.config(text=auto_title)
             self.auto_connect_remaining -= 1
             self.direct_rdp_timer = self.root.after(1000, self._countdown_tick)
         else:
@@ -1078,17 +1183,17 @@ class NativeLauncherApp:
 
     def open_wifi_dialog(self):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Configura Wi-Fi")
+        dialog.title(self.tr("wifi_title"))
         dialog.geometry("520x460")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
         self._center_window(dialog, 520, 460)
 
-        lbl_h = tk.Label(dialog, text="Configura Connessione Wi-Fi", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD)
+        lbl_h = tk.Label(dialog, text=self.tr("wifi_title"), font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD)
         lbl_h.pack(pady=(16, 6))
 
-        status_lbl = tk.Label(dialog, text="Scansione reti Wi-Fi in corso...", font=self.font_link, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD)
+        status_lbl = tk.Label(dialog, text="Scansione reti Wi-Fi in corso..." if self.lang == "it" else "Scanning Wi-Fi networks...", font=self.font_link, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD)
         status_lbl.pack(pady=(0, 10))
 
         list_frame = tk.Frame(dialog, bg=COLOR_CARD, padx=20)
@@ -1114,11 +1219,11 @@ class NativeLauncherApp:
         form = tk.Frame(dialog, bg=COLOR_CARD, padx=20, pady=10)
         form.pack(fill=tk.X)
 
-        tk.Label(form, text="Rete Wi-Fi Selezionata:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        tk.Label(form, text="Rete Wi-Fi Selezionata:" if self.lang == "it" else "Selected Wi-Fi Network:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
         entry_ssid = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
         entry_ssid.pack(fill=tk.X, pady=(2, 8), ipady=3)
 
-        tk.Label(form, text="Password Wi-Fi:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        tk.Label(form, text=self.tr("modal_wifi_pwd"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
         entry_pwd = tk.Entry(form, font=self.font_dropdown, show="●", bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
         entry_pwd.pack(fill=tk.X, pady=(2, 8), ipady=3)
 
@@ -1141,13 +1246,17 @@ class NativeLauncherApp:
         def apply_scan(networks):
             listbox.delete(0, tk.END)
             if not networks:
-                status_lbl.config(text="Nessuna rete trovata.", fg=COLOR_BTN_CANCEL)
+                status_lbl.config(text=self.tr("wifi_none_found"), fg=COLOR_BTN_CANCEL)
                 return
-            status_lbl.config(text=f"Trovate {len(networks)} reti. Selezionane una:", fg=COLOR_TEXT_MUTED)
+            count_msg = f"Trovate {len(networks)} reti. Selezionane una:" if self.lang == "it" else f"Found {len(networks)} networks. Select one:"
+            status_lbl.config(text=count_msg, fg=COLOR_TEXT_MUTED)
+            sec_prot = "[PROTETTA]" if self.lang == "it" else "[SECURED]"
+            sec_open = "[APERTA]" if self.lang == "it" else "[OPEN]"
+            sig_lbl = self.tr("status_signal")
             for n in networks:
-                sec = "[PROTETTA]" if n.get("security") else "[APERTA]"
+                sec = sec_prot if n.get("security") else sec_open
                 sig = f"{n.get('signal', 0)}%"
-                listbox.insert(tk.END, f"{n.get('ssid')} ({sec} Segnale: {sig})")
+                listbox.insert(tk.END, f"{n.get('ssid')} ({sec} {sig_lbl} {sig})")
 
         threading.Thread(target=scan_worker, daemon=True).start()
 
@@ -1156,7 +1265,7 @@ class NativeLauncherApp:
             p = entry_pwd.get()
             if not s:
                 return
-            status_lbl.config(text=f"Connessione a '{s}'...", fg=COLOR_TITLE_CYAN)
+            status_lbl.config(text=f"Connessione a '{s}'..." if self.lang == "it" else f"Connecting to '{s}'...", fg=COLOR_TITLE_CYAN)
 
             def conn_worker():
                 res = self._api_post("/api/wifi/connect", {"ssid": s, "password": p}, timeout=12.0)
@@ -1164,31 +1273,35 @@ class NativeLauncherApp:
 
             def on_conn_done(res):
                 if res.get("success"):
-                    status_lbl.config(text="Connesso con successo!", fg=COLOR_SUCCESS)
+                    status_lbl.config(text="Connesso con successo!" if self.lang == "it" else "Connected successfully!", fg=COLOR_SUCCESS)
                     self.root.after(1000, dialog.destroy)
                     self.refresh_all(force=True)
                 else:
-                    status_lbl.config(text=f"Errore: {res.get('message')}", fg=COLOR_BTN_CANCEL)
+                    err_lbl = self.tr("modal_error")
+                    status_lbl.config(text=f"{err_lbl}: {res.get('message')}", fg=COLOR_BTN_CANCEL)
 
             threading.Thread(target=conn_worker, daemon=True).start()
 
         btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=20, pady=6)
         btn_box.pack(fill=tk.X)
 
-        tk.Button(btn_box, text="Riscansiona", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=12, pady=6, command=lambda: threading.Thread(target=scan_worker, daemon=True).start()).pack(side=tk.LEFT)
-        tk.Button(btn_box, text="Connetti a Wi-Fi", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=do_connect).pack(side=tk.RIGHT)
+        rescan_txt = "Riscansiona" if self.lang == "it" else "Rescan"
+        conn_txt = "Connetti a Wi-Fi" if self.lang == "it" else "Connect to Wi-Fi"
+        tk.Button(btn_box, text=rescan_txt, font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=12, pady=6, command=lambda: threading.Thread(target=scan_worker, daemon=True).start()).pack(side=tk.LEFT)
+        tk.Button(btn_box, text=conn_txt, font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=do_connect).pack(side=tk.RIGHT)
 
     def open_hosts_manager(self):
         """Displays configured hosts with options to set default or edit."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("Gestisci Computer Remoti")
+        dialog.title(self.tr("hosts_title"))
         dialog.geometry("560x420")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
         self._center_window(dialog, 560, 420)
 
-        tk.Label(dialog, text="Computer Remoti Configurati", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 10))
+        hdr_txt = "Computer Remoti Configurati" if self.lang == "it" else "Configured Remote Computers"
+        tk.Label(dialog, text=hdr_txt, font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 10))
 
         hosts_frame = tk.Frame(dialog, bg=COLOR_CARD, padx=20)
         hosts_frame.pack(fill=tk.BOTH, expand=True)
@@ -1204,11 +1317,13 @@ class NativeLauncherApp:
             tk.Label(h_card, text=title, font=self.font_dropdown, fg=COLOR_TEXT_MAIN, bg=COLOR_INNER_BOX).pack(side=tk.LEFT)
 
             if is_def:
-                tk.Label(h_card, text="★ PREDEFINITO", font=self.font_status_label, fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX).pack(side=tk.RIGHT, padx=6)
+                def_tag = "★ PREDEFINITO" if self.lang == "it" else "★ DEFAULT"
+                tk.Label(h_card, text=def_tag, font=self.font_status_label, fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX).pack(side=tk.RIGHT, padx=6)
             else:
+                set_def_txt = "Imposta predefinito" if self.lang == "it" else "Set default"
                 tk.Button(
                     h_card,
-                    text="Imposta predefinito",
+                    text=set_def_txt,
                     font=self.font_status_sub,
                     fg=COLOR_LINK,
                     bg=COLOR_CARD,
@@ -1218,9 +1333,10 @@ class NativeLauncherApp:
                     command=lambda k=key: [self._api_post("/api/hosts/set-default", {"key": k}), dialog.destroy(), self.refresh_all(force=True)]
                 ).pack(side=tk.RIGHT, padx=6)
 
+            edit_txt = self.tr("btn_edit")
             tk.Button(
                 h_card,
-                text="Modifica",
+                text=edit_txt,
                 font=self.font_status_sub,
                 fg=COLOR_TEXT_MAIN,
                 bg=COLOR_BTN_SECONDARY,
@@ -1232,51 +1348,55 @@ class NativeLauncherApp:
 
         btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=20, pady=12)
         btn_box.pack(fill=tk.X)
-        tk.Button(btn_box, text="+ Aggiungi Nuovo PC", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=14, pady=6, command=lambda: [dialog.destroy(), self.open_host_edit_dialog("", {})]).pack(side=tk.LEFT)
-        tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(side=tk.RIGHT)
+        tk.Button(btn_box, text=self.tr("hosts_btn_add"), font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=14, pady=6, command=lambda: [dialog.destroy(), self.open_host_edit_dialog("", {})]).pack(side=tk.LEFT)
+        tk.Button(btn_box, text=self.tr("modal_close"), font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(side=tk.RIGHT)
 
     def open_host_edit_dialog(self, key, host_info):
         """Allows configuring or modifying a remote host including saved credentials."""
         dialog = tk.Toplevel(self.root)
         is_new = not bool(key)
-        dialog.title("Aggiungi Nuovo PC" if is_new else f"Modifica {host_info.get('name') or key}")
+        dialog_title = (
+            self.tr("hosts_btn_add").replace("+ ", "") if is_new else f"{self.tr('btn_edit')} {host_info.get('name') or key}"
+        )
+        dialog.title(dialog_title)
         dialog.geometry("500x480")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
         self._center_window(dialog, 500, 480)
 
-        tk.Label(dialog, text="Aggiungi Nuovo PC" if is_new else f"Modifica {host_info.get('name') or key}", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 12))
+        tk.Label(dialog, text=dialog_title, font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 12))
 
         form = tk.Frame(dialog, bg=COLOR_CARD, padx=24)
         form.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(form, text="Nome Visualizzato:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        tk.Label(form, text=self.tr("modal_host_name"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
         entry_name = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
         entry_name.insert(0, host_info.get("name") or "")
         entry_name.pack(fill=tk.X, pady=(2, 8), ipady=3)
 
-        tk.Label(form, text="Hostname MagicDNS / Tailscale:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        tk.Label(form, text=self.tr("modal_host_hostname"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
         entry_host = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
         entry_host.insert(0, host_info.get("hostname") or "")
         entry_host.pack(fill=tk.X, pady=(2, 8), ipady=3)
 
-        tk.Label(form, text="Nome Utente Windows predefinito:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        tk.Label(form, text=self.tr("modal_host_username"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
         entry_user = tk.Entry(form, font=self.font_dropdown, bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
         entry_user.insert(0, host_info.get("username") or "")
         entry_user.pack(fill=tk.X, pady=(2, 8), ipady=3)
 
-        tk.Label(form, text="Password Windows salvata:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+        tk.Label(form, text=self.tr("modal_host_password"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
         entry_pass = tk.Entry(form, font=self.font_dropdown, show="●", bg=COLOR_INNER_BOX, fg=COLOR_TEXT_MAIN, insertbackground=COLOR_TEXT_MAIN, bd=1, relief=tk.FLAT)
         entry_pass.pack(fill=tk.X, pady=(2, 6), ipady=3)
 
         var_clear_pwd = tk.BooleanVar(value=False)
         if host_info.get("has_password"):
-            tk.Label(form, text="🔒 Password salvata presente. Lascia vuoto per mantenerla.", font=self.font_link, fg=COLOR_SUCCESS, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
-            tk.Checkbutton(form, text="Elimina password salvata", variable=var_clear_pwd, font=self.font_link, fg="#f87171", bg=COLOR_CARD, selectcolor=COLOR_INNER_BOX).pack(anchor="w", pady=(2, 6))
+            tk.Label(form, text=self.tr("modal_host_pwd_saved"), font=self.font_link, fg=COLOR_SUCCESS, bg=COLOR_CARD, anchor="w").pack(fill=tk.X)
+            tk.Checkbutton(form, text=self.tr("modal_host_pwd_delete"), variable=var_clear_pwd, font=self.font_link, fg="#f87171", bg=COLOR_CARD, selectcolor=COLOR_INNER_BOX).pack(anchor="w", pady=(2, 6))
 
         var_is_def = tk.BooleanVar(value=(key == self.default_host_key))
-        tk.Checkbutton(form, text="Imposta come PC predefinito all'avvio", variable=var_is_def, font=self.font_link, fg=COLOR_TEXT_MAIN, bg=COLOR_CARD, selectcolor=COLOR_INNER_BOX).pack(anchor="w", pady=(6, 12))
+        def_chk_lbl = "Imposta come PC predefinito all'avvio" if self.lang == "it" else "Set as default PC on boot"
+        tk.Checkbutton(form, text=def_chk_lbl, variable=var_is_def, font=self.font_link, fg=COLOR_TEXT_MAIN, bg=COLOR_CARD, selectcolor=COLOR_INNER_BOX).pack(anchor="w", pady=(6, 12))
 
         def save_host():
             nm = entry_name.get().strip()
@@ -1286,7 +1406,9 @@ class NativeLauncherApp:
             cp = var_clear_pwd.get()
             is_d = var_is_def.get()
             if not nm or not hn:
-                messagebox.showwarning("Dati incompleti", "Inserisci Nome e Hostname del computer.")
+                warn_title = self.tr("modal_notice")
+                warn_msg = "Inserisci Nome e Hostname del computer." if self.lang == "it" else "Please enter PC Name and Hostname."
+                messagebox.showwarning(warn_title, warn_msg)
                 return
 
             host_key_val = key or hn.lower().replace(" ", "-")
@@ -1303,24 +1425,27 @@ class NativeLauncherApp:
                 dialog.destroy()
                 self.refresh_all(force=True)
             else:
-                messagebox.showerror("Errore", f"Impossibile salvare:\n{res.get('message')}")
+                err_title = self.tr("modal_error")
+                err_msg = f"Impossibile salvare:\n{res.get('message')}" if self.lang == "it" else f"Unable to save:\n{res.get('message')}"
+                messagebox.showerror(err_title, err_msg)
 
         btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=24, pady=12)
         btn_box.pack(fill=tk.X, side=tk.BOTTOM)
-        tk.Button(btn_box, text="Annulla", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
-        tk.Button(btn_box, text="Salva Configurazione", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_host).pack(side=tk.RIGHT)
+        tk.Button(btn_box, text=self.tr("modal_cancel"), font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
+        save_btn_lbl = "Salva Configurazione" if self.lang == "it" else "Save Configuration"
+        tk.Button(btn_box, text=save_btn_lbl, font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_host).pack(side=tk.RIGHT)
 
     def open_diagnostics_dialog(self):
         """Displays diagnostics: ping, system metrics, Tailscale, FS."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("Diagnostica di Sistema")
+        dialog.title(self.tr("diag_title"))
         dialog.geometry("520x420")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
         self._center_window(dialog, 520, 420)
 
-        tk.Label(dialog, text="Diagnostica e Stato Hardware", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 12))
+        tk.Label(dialog, text=self.tr("diag_title"), font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(16, 12))
 
         box = tk.Frame(dialog, bg=COLOR_INNER_BOX, highlightbackground=COLOR_INNER_BORDER, highlightthickness=1, padx=16, pady=14)
         box.pack(fill=tk.BOTH, expand=True, padx=20)
@@ -1329,13 +1454,17 @@ class NativeLauncherApp:
         ts = self.system_status.get("tailscale", {})
         fs = self._api_get("/api/system/fs-status") or {}
 
+        fs_ro_txt = self.tr("fs_status_ro") if fs.get("root_ro") else self.tr("fs_status_rw")
+        ts_conn_txt = self.tr("badge_connected") if ts.get("connected") else self.tr("badge_disconnected")
+        ts_ip_txt = ts.get("ip") or ("Non attivo" if self.lang == "it" else "Inactive")
+
         info_lines = [
-            f"Versione HidaThin:        v{__version__}",
-            f"Filesystem Root:         {'SOLA LETTURA (RO)' if fs.get('root_ro') else 'SCRITTURA (RW)'}",
-            f"Interfaccia Primaria:    {net.get('primary_ip', '--')}",
-            f"Tailscale WireGuard:     {ts.get('ip', 'Non attivo')} ({'Connesso' if ts.get('connected') else 'Disconnesso'})",
-            f"Host Predefinito:        {self.default_host_key or '--'}",
-            f"Porta Web Admin:         8080 (http://127.0.0.1:8080)"
+            f"{'Versione HidaThin:' if self.lang == 'it' else 'HidaThin Version:'}        v{__version__}",
+            f"{'Filesystem Root:' if self.lang == 'it' else 'Root Filesystem:'}         {fs_ro_txt}",
+            f"{'Interfaccia Primaria:' if self.lang == 'it' else 'Primary Interface:'}    {net.get('primary_ip', '--')}",
+            f"Tailscale WireGuard:     {ts_ip_txt} ({ts_conn_txt})",
+            f"{'Host Predefinito:' if self.lang == 'it' else 'Default Host:'}        {self.default_host_key or '--'}",
+            f"{'Porta Web Admin:' if self.lang == 'it' else 'Web Admin Port:'}         8080 (http://127.0.0.1:8080)"
         ]
 
         lbl = tk.Label(box, text="\n\n".join(info_lines), font=self.font_dropdown, fg=COLOR_TEXT_MAIN, bg=COLOR_INNER_BOX, justify=tk.LEFT)
@@ -1343,19 +1472,19 @@ class NativeLauncherApp:
 
         btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=20, pady=12)
         btn_box.pack(fill=tk.X)
-        tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(side=tk.RIGHT)
+        tk.Button(btn_box, text=self.tr("modal_close"), font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=6, command=dialog.destroy).pack(side=tk.RIGHT)
 
     def open_settings_dialog(self, initial_tab="rdp"):
         """Displays interactive video quality / RDP settings and Tailscale VPN management."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("Impostazioni Sistema & Tailscale")
-        dialog.geometry("580x620")
+        dialog.title(self.tr("settings_title"))
+        dialog.geometry("580x640")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
         dialog.grab_set()
-        self._center_window(dialog, 580, 620)
+        self._center_window(dialog, 580, 640)
 
-        tk.Label(dialog, text="⚙  Impostazioni & Rete VPN", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(14, 8))
+        tk.Label(dialog, text=f"⚙  {self.tr('settings_title')}", font=self.font_modal_title, fg=COLOR_TITLE_CYAN, bg=COLOR_CARD).pack(pady=(14, 8))
 
         cur_settings = {}
         try:
@@ -1363,7 +1492,7 @@ class NativeLauncherApp:
             cur_settings = get_settings()
         except Exception:
             cur_settings = {
-                "rdp_client": "hidathin-rdp", "profile": "balanced",
+                "language": self.lang, "rdp_client": "hidathin-rdp", "profile": "balanced",
                 "overscan": "none", "color_depth": 32, "tailscale": {"enabled": True}
             }
 
@@ -1374,7 +1503,7 @@ class NativeLauncherApp:
         tab_bar.columnconfigure(1, weight=1)
 
         btn_tab_rdp = tk.Button(
-            tab_bar, text="⚙  RDP & Schermo", font=self.font_btn_action,
+            tab_bar, text="⚙  RDP & Schermo" if self.lang == "it" else "⚙  RDP & Display", font=self.font_btn_action,
             relief=tk.FLAT, bd=0, cursor="hand2", padx=12, pady=6
         )
         btn_tab_rdp.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
@@ -1392,10 +1521,24 @@ class NativeLauncherApp:
         # Tab 1: RDP & Display
         frame_rdp = tk.Frame(content_container, bg=COLOR_CARD)
 
+        # 0. System Language Selector
+        tk.Label(frame_rdp, text=self.tr("setting_language"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
+        lang_map = [
+            ("it", "🇮🇹 Italiano"),
+            ("en", "🇬🇧 English"),
+        ]
+        lang_var = tk.StringVar()
+        lang_combo = ttk.Combobox(frame_rdp, textvariable=lang_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
+        lang_combo["values"] = [label for _, label in lang_map]
+        cur_lang = cur_settings.get("language", self.lang)
+        lang_idx = next((i for i, (k, _) in enumerate(lang_map) if k == cur_lang), 0)
+        lang_combo.current(lang_idx)
+        lang_combo.pack(fill=tk.X, pady=(0, 8), ipady=3)
+
         # 1. RDP Client Program
-        tk.Label(frame_rdp, text="Programma Client RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
+        tk.Label(frame_rdp, text=self.tr("setting_rdp_client"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         client_map = [
-            ("hidathin-rdp", "hidathin-rdp (Consigliato - Nativo Zero-Copy WTware ARM64)"),
+            ("hidathin-rdp", "hidathin-rdp (Consigliato - Nativo Zero-Copy WTware ARM64)" if self.lang == "it" else "hidathin-rdp (Recommended - Native Zero-Copy WTware ARM64)"),
             ("xfreerdp3", "xfreerdp3 (Standard FreeRDP 3.x upstream)"),
         ]
         client_var = tk.StringVar()
@@ -1407,11 +1550,11 @@ class NativeLauncherApp:
         client_combo.pack(fill=tk.X, pady=(0, 8), ipady=3)
 
         # 2. RDP Profile
-        tk.Label(frame_rdp, text="Profilo Grafico RDP:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
+        tk.Label(frame_rdp, text=self.tr("setting_profile"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         profile_map = [
-            ("balanced", "Bilanciato (Consigliato - Testi nitidi ClearType Lossless 1:1)"),
-            ("quality", "Qualità Massima (AVC444 Colore 4:4:4 + Effetti Completi)"),
-            ("performance", "Prestazioni Elevate (Bassa banda, senza animazioni)"),
+            ("balanced", "Bilanciato (Consigliato - Testi nitidi ClearType Lossless 1:1)" if self.lang == "it" else "Balanced (Recommended - Crisp ClearType text Lossless 1:1)"),
+            ("quality", "Qualità Massima (AVC444 Colore 4:4:4 + Effetti Completi)" if self.lang == "it" else "Max Quality (AVC444 Color 4:4:4 + Full effects)"),
+            ("performance", "Prestazioni Elevate (Bassa banda, senza animazioni)" if self.lang == "it" else "High Performance (Low bandwidth, animations off)"),
         ]
         prof_var = tk.StringVar()
         prof_combo = ttk.Combobox(frame_rdp, textvariable=prof_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
@@ -1422,12 +1565,12 @@ class NativeLauncherApp:
         prof_combo.pack(fill=tk.X, pady=(0, 8), ipady=3)
 
         # 3. Overscan
-        tk.Label(frame_rdp, text="Mappatura Pixel Schermo / Overscan TV:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
+        tk.Label(frame_rdp, text=self.tr("setting_overscan"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         overscan_map = [
-            ("none", "1:1 Pixel-Perfect (Consigliata - Massima nitidezza caratteri)"),
-            ("light", "Overscan Leggero (~2.5% - Solo per TV che tagliano i bordi)"),
-            ("medium", "Overscan Medio (~5.0% - Solo per TV con zoom fisso)"),
-            ("heavy", "Overscan Massimo (~7.5% - Solo per TV con zoom elevato)"),
+            ("none", "1:1 Pixel-Perfect (Consigliata - Massima nitidezza caratteri)" if self.lang == "it" else "1:1 Pixel-Perfect (Recommended - Sharpest text)"),
+            ("light", "Overscan Leggero (~2.5% - Solo per TV che tagliano i bordi)" if self.lang == "it" else "Light Overscan (~2.5% margins)"),
+            ("medium", "Overscan Medio (~5.0% - Solo per TV con zoom fisso)" if self.lang == "it" else "Medium Overscan (~5.0% margins)"),
+            ("heavy", "Overscan Massimo (~7.5% - Solo per TV con zoom elevato)" if self.lang == "it" else "Heavy Overscan (~7.5% margins)"),
         ]
         over_var = tk.StringVar()
         over_combo = ttk.Combobox(frame_rdp, textvariable=over_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
@@ -1440,11 +1583,11 @@ class NativeLauncherApp:
         over_combo.pack(fill=tk.X, pady=(0, 8), ipady=3)
 
         # 4. Color Depth
-        tk.Label(frame_rdp, text="Profondità Colore:", font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
+        tk.Label(frame_rdp, text=self.tr("setting_color_depth"), font=self.font_status_label, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, anchor="w").pack(fill=tk.X, pady=(2, 2))
         bpp_map = [
-            (32, "32-bit TrueColor (Consigliato per antialiasing subpixel ClearType)"),
+            (32, "32-bit TrueColor (Consigliato per ClearType)" if self.lang == "it" else "32-bit TrueColor (Recommended for ClearType)"),
             (24, "24-bit Standard"),
-            (16, "16-bit Risparmio Banda"),
+            (16, "16-bit Risparmio Banda" if self.lang == "it" else "16-bit Low Bandwidth"),
         ]
         bpp_var = tk.StringVar()
         bpp_combo = ttk.Combobox(frame_rdp, textvariable=bpp_var, style="Dark.TCombobox", state="readonly", font=self.font_link)
@@ -1456,7 +1599,7 @@ class NativeLauncherApp:
 
         ts_ip = self.system_status.get("tailscale", {}).get("ip")
         lan_ip = self.system_status.get("network", {}).get("primary_ip") or "127.0.0.1"
-        web_info = f"Pannello Web Admin:  http://{lan_ip}:8080"
+        web_info = f"Pannello Web Admin:  http://{lan_ip}:8080" if self.lang == "it" else f"Web Admin Panel:  http://{lan_ip}:8080"
         if ts_ip:
             web_info += f"  |  http://{ts_ip}:8080"
         tk.Label(frame_rdp, text=web_info, font=self.font_status_sub, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD).pack(pady=(4, 0))
@@ -1472,7 +1615,7 @@ class NativeLauncherApp:
         ts_header.pack(fill=tk.X, pady=(0, 10))
 
         chk_ts = tk.Checkbutton(
-            ts_header, text="Abilita Tailscale VPN", variable=ts_enabled_var,
+            ts_header, text=self.tr("ts_enable"), variable=ts_enabled_var,
             font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_CARD,
             activeforeground=COLOR_TEXT_MAIN, activebackground=COLOR_CARD,
             selectcolor=COLOR_INNER_BOX, cursor="hand2"
@@ -1480,7 +1623,7 @@ class NativeLauncherApp:
         chk_ts.pack(side=tk.LEFT)
 
         lbl_ts_badge = tk.Label(
-            ts_header, text="● In verifica...", font=self.font_badge,
+            ts_header, text=f"● {self.tr('badge_checking')}", font=self.font_badge,
             fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX, padx=10, pady=4
         )
         lbl_ts_badge.pack(side=tk.RIGHT)
@@ -1496,13 +1639,13 @@ class NativeLauncherApp:
             val_lbl.grid(row=row, column=1, sticky="w", padx=(10, 0), pady=2)
             return val_lbl
 
-        lbl_val_ip = make_ts_info_row(0, "Indirizzo IP:")
-        lbl_val_host = make_ts_info_row(1, "Nome Dispositivo:")
-        lbl_val_net = make_ts_info_row(2, "Tailnet:")
+        lbl_val_ip = make_ts_info_row(0, self.tr("ts_ip_label"))
+        lbl_val_host = make_ts_info_row(1, self.tr("ts_hostname_label"))
+        lbl_val_net = make_ts_info_row(2, self.tr("ts_tailnet_label"))
 
         # Auth URL Banner (hidden by default)
         auth_banner = tk.Frame(frame_ts, bg=COLOR_INNER_BOX, highlightbackground=COLOR_ACCENT_BLUE, highlightthickness=1, padx=12, pady=10)
-        lbl_auth_msg = tk.Label(auth_banner, text="Autenticazione richiesta per accedere alla Tailnet.", font=self.font_status_sub, fg=COLOR_TITLE_CYAN, bg=COLOR_INNER_BOX, anchor="w")
+        lbl_auth_msg = tk.Label(auth_banner, text=self.tr("ts_auth_required"), font=self.font_status_sub, fg=COLOR_TITLE_CYAN, bg=COLOR_INNER_BOX, anchor="w")
         lbl_auth_msg.pack(fill=tk.X, pady=(0, 6))
 
         current_auth_url = {"url": None}
@@ -1515,7 +1658,7 @@ class NativeLauncherApp:
                     lbl_ts_msg.config(text=f"Errore apertura browser: {ex}", fg=COLOR_BTN_CANCEL)
 
         btn_open_auth = tk.Button(
-            auth_banner, text="🌐 Apri link di accesso", font=self.font_btn_action,
+            auth_banner, text=f"🌐 {self.tr('ts_complete_login')}", font=self.font_btn_action,
             fg="#ffffff", bg=COLOR_ACCENT_BLUE, activeforeground="#ffffff",
             activebackground=COLOR_TITLE_CYAN, relief=tk.FLAT, bd=0,
             cursor="hand2", padx=10, pady=4, command=open_auth_link
@@ -1544,25 +1687,25 @@ class NativeLauncherApp:
             )
 
         btn_ts_conn = tk.Button(
-            actions, text="⚡ Connetti", font=self.font_btn_action, fg="#ffffff",
+            actions, text=self.tr("ts_btn_connect"), font=self.font_btn_action, fg="#ffffff",
             bg=COLOR_BTN_CONNECT, activeforeground="#ffffff",
             activebackground=COLOR_BTN_CONNECT_HOVER, relief=tk.FLAT, bd=0,
             cursor="hand2", padx=8, pady=6,
-            command=lambda: run_ts_action("/api/tailscale/connect", "Connessione Tailscale in corso...")
+            command=lambda: run_ts_action("/api/tailscale/connect", "Connessione Tailscale in corso..." if self.lang == "it" else "Connecting to Tailnet...")
         )
         btn_ts_conn.grid(row=0, column=0, sticky="nsew", padx=(0, 4), pady=(0, 6), ipady=4)
 
         btn_ts_disc = tk.Button(
-            actions, text="⏹ Disconnetti", font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
+            actions, text=self.tr("ts_btn_disconnect"), font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY, activeforeground=COLOR_TEXT_MAIN,
             activebackground=COLOR_BTN_SECONDARY_HOVER, relief=tk.FLAT, bd=0,
             cursor="hand2", padx=8, pady=6,
-            command=lambda: run_ts_action("/api/tailscale/disconnect", "Disconnessione Tailscale in corso...")
+            command=lambda: run_ts_action("/api/tailscale/disconnect", "Disconnessione Tailscale in corso..." if self.lang == "it" else "Disconnecting Tailscale...")
         )
         btn_ts_disc.grid(row=0, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6), ipady=4)
 
         btn_ts_ref = tk.Button(
-            actions, text="🔄 Aggiorna Stato", font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
+            actions, text=self.tr("ts_btn_refresh"), font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY, activeforeground=COLOR_TEXT_MAIN,
             activebackground=COLOR_BTN_SECONDARY_HOVER, relief=tk.FLAT, bd=0,
             cursor="hand2", padx=8, pady=6,
@@ -1571,11 +1714,11 @@ class NativeLauncherApp:
         btn_ts_ref.grid(row=1, column=0, sticky="nsew", padx=(0, 4), ipady=4)
 
         btn_ts_log = tk.Button(
-            actions, text="🔑 Accedi / Login", font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
+            actions, text=self.tr("ts_btn_login"), font=self.font_btn_action, fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY, activeforeground=COLOR_TEXT_MAIN,
             activebackground=COLOR_BTN_SECONDARY_HOVER, relief=tk.FLAT, bd=0,
             cursor="hand2", padx=8, pady=6,
-            command=lambda: run_ts_action("/api/tailscale/login", "Avvio autenticazione Tailscale...")
+            command=lambda: run_ts_action("/api/tailscale/login", "Avvio autenticazione Tailscale..." if self.lang == "it" else "Starting Tailscale login...")
         )
         btn_ts_log.grid(row=1, column=1, sticky="nsew", padx=(4, 0), ipady=4)
 
@@ -1588,7 +1731,7 @@ class NativeLauncherApp:
             if isinstance(ts_data.get("enabled"), bool):
                 ts_enabled_var.set(ts_data["enabled"])
 
-            status_str = ts_data.get("status") or "Disconnesso"
+            status_str = ts_data.get("status") or ("Disconnesso" if self.lang == "it" else "Disconnected")
             ip_val = ts_data.get("ip") or "--"
             host_val = ts_data.get("hostname") or "--"
             net_val = ts_data.get("tailnet") or "--"
@@ -1601,11 +1744,11 @@ class NativeLauncherApp:
             if ts_data.get("connected"):
                 lbl_ts_badge.config(text=f"● {status_str}", fg=COLOR_SUCCESS, bg=COLOR_INNER_BOX)
             elif not ts_data.get("enabled", True):
-                lbl_ts_badge.config(text="○ Disabilitato", fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX)
+                lbl_ts_badge.config(text=f"○ {'Disabilitato' if self.lang == 'it' else 'Disabled'}", fg=COLOR_TEXT_MUTED, bg=COLOR_INNER_BOX)
             elif status_str == "Autenticazione richiesta":
-                lbl_ts_badge.config(text="⚠ Accedi", fg="#f59e0b", bg=COLOR_INNER_BOX)
+                lbl_ts_badge.config(text=f"⚠ {'Accedi' if self.lang == 'it' else 'Log In'}", fg="#f59e0b", bg=COLOR_INNER_BOX)
             elif status_str == "Connessione in corso":
-                lbl_ts_badge.config(text="◌ In corso", fg=COLOR_TITLE_CYAN, bg=COLOR_INNER_BOX)
+                lbl_ts_badge.config(text=f"◌ {'In corso' if self.lang == 'it' else 'Connecting'}", fg=COLOR_TITLE_CYAN, bg=COLOR_INNER_BOX)
             else:
                 lbl_ts_badge.config(text=f"○ {status_str}", fg=COLOR_BTN_CANCEL, bg=COLOR_INNER_BOX)
 
@@ -1615,7 +1758,8 @@ class NativeLauncherApp:
                 auth_banner.pack_forget()
 
         def refresh_ts_info(force=False):
-            lbl_ts_msg.config(text="Verifica stato in corso...", fg=COLOR_TITLE_CYAN)
+            wait_lbl = "Verifica stato in corso..." if self.lang == "it" else "Checking status..."
+            lbl_ts_msg.config(text=wait_lbl, fg=COLOR_TITLE_CYAN)
             def worker():
                 endpoint = "/api/tailscale/status?force=true" if force else "/api/tailscale/status"
                 res = self._api_get(endpoint)
@@ -1623,14 +1767,14 @@ class NativeLauncherApp:
             def on_refresh_done(res):
                 if res:
                     update_ts_display(res)
-                    lbl_ts_msg.config(text="Stato aggiornato", fg=COLOR_SUCCESS)
+                    lbl_ts_msg.config(text="Stato aggiornato" if self.lang == "it" else "Status updated", fg=COLOR_SUCCESS)
                 else:
-                    lbl_ts_msg.config(text="Impossibile aggiornare lo stato", fg=COLOR_BTN_CANCEL)
+                    lbl_ts_msg.config(text="Impossibile aggiornare lo stato" if self.lang == "it" else "Unable to update status", fg=COLOR_BTN_CANCEL)
             threading.Thread(target=worker, daemon=True).start()
 
         def on_ts_toggle():
             new_val = ts_enabled_var.get()
-            lbl_ts_msg.config(text="Applicazione toggle Tailscale...", fg=COLOR_TITLE_CYAN)
+            lbl_ts_msg.config(text="Applicazione toggle Tailscale..." if self.lang == "it" else "Applying Tailscale toggle...", fg=COLOR_TITLE_CYAN)
             def worker():
                 res = self._api_post("/api/tailscale/toggle", {"enabled": new_val})
                 self.root.after(0, lambda: on_ts_action_done(res))
@@ -1660,15 +1804,17 @@ class NativeLauncherApp:
         status_lbl.pack(side=tk.BOTTOM, pady=(0, 2))
 
         def save_and_apply():
+            sel_lang = lang_map[max(0, lang_combo.current())][0]
             sel_client = client_map[max(0, client_combo.current())][0]
             sel_prof = profile_map[max(0, prof_combo.current())][0]
             sel_over = overscan_map[max(0, over_combo.current())][0]
             sel_bpp = bpp_map[max(0, bpp_combo.current())][0]
             sel_ts_enabled = ts_enabled_var.get()
-            status_lbl.config(text="Applicazione impostazioni in corso...", fg=COLOR_TITLE_CYAN)
+            status_lbl.config(text="Applicazione impostazioni in corso..." if self.lang == "it" else "Applying settings...", fg=COLOR_TITLE_CYAN)
 
             def worker():
                 res = self._api_post("/api/settings/save", {
+                    "language": sel_lang,
                     "rdp_client": sel_client,
                     "profile": sel_prof,
                     "overscan": sel_over,
@@ -1676,21 +1822,24 @@ class NativeLauncherApp:
                     "tailscale": {"enabled": sel_ts_enabled}
                 })
                 self._api_post("/api/system/overscan/apply", {"mode": sel_over})
-                self.root.after(0, lambda: on_saved(res))
+                self.root.after(0, lambda: on_saved(res, sel_lang))
 
-            def on_saved(res):
+            def on_saved(res, new_lang):
                 if res.get("success"):
-                    status_lbl.config(text="✓ Impostazioni applicate con successo!", fg=COLOR_SUCCESS)
+                    self.lang = new_lang
+                    self.update_ui_language()
+                    status_lbl.config(text="✓ Impostazioni applicate con successo!" if self.lang == "it" else "✓ Settings applied successfully!", fg=COLOR_SUCCESS)
                     self.root.after(900, dialog.destroy)
                 else:
-                    status_lbl.config(text=f"Errore: {res.get('message')}", fg=COLOR_BTN_CANCEL)
+                    err_txt = self.tr("modal_error")
+                    status_lbl.config(text=f"{err_txt}: {res.get('message')}", fg=COLOR_BTN_CANCEL)
 
             threading.Thread(target=worker, daemon=True).start()
 
         btn_box = tk.Frame(dialog, bg=COLOR_CARD, padx=24, pady=8)
         btn_box.pack(fill=tk.X, side=tk.BOTTOM)
-        tk.Button(btn_box, text="Chiudi", font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
-        tk.Button(btn_box, text="Salva e Applica", font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_and_apply).pack(side=tk.RIGHT)
+        tk.Button(btn_box, text=self.tr("modal_close"), font=self.font_btn_action, fg=COLOR_TEXT_MAIN, bg=COLOR_BTN_SECONDARY, relief=tk.FLAT, bd=0, cursor="hand2", padx=16, pady=8, command=dialog.destroy).pack(side=tk.LEFT)
+        tk.Button(btn_box, text=self.tr("btn_save_and_apply"), font=self.font_btn_action, fg="#ffffff", bg=COLOR_BTN_CONNECT, relief=tk.FLAT, bd=0, cursor="hand2", padx=20, pady=8, command=save_and_apply).pack(side=tk.RIGHT)
 
         show_tab(initial_tab)
 
@@ -1705,7 +1854,8 @@ class NativeLauncherApp:
         """
         dialog = tk.Toplevel(self.root)
         host_name = host_info.get("name") or host_key
-        dialog.title(f"Connessione RDP – {host_name}")
+        dlg_title = f"{'Connessione RDP' if self.lang == 'it' else 'RDP Connection'} – {host_name}"
+        dialog.title(dlg_title)
         dialog.geometry("480x380")
         dialog.configure(bg=COLOR_CARD)
         dialog.transient(self.root)
@@ -1714,7 +1864,7 @@ class NativeLauncherApp:
 
         tk.Label(
             dialog,
-            text=f"Connessione RDP – {host_name}",
+            text=dlg_title,
             font=self.font_modal_title,
             fg=COLOR_TITLE_CYAN,
             bg=COLOR_CARD
@@ -1729,9 +1879,10 @@ class NativeLauncherApp:
                 bg=COLOR_CARD
             ).pack(pady=(0, 10))
         else:
+            prompt_lbl = "Inserisci le credenziali Windows per connetterti" if self.lang == "it" else "Enter Windows credentials to connect"
             tk.Label(
                 dialog,
-                text="Inserisci le credenziali Windows per connetterti",
+                text=prompt_lbl,
                 font=self.font_link,
                 fg=COLOR_TEXT_MUTED,
                 bg=COLOR_CARD
@@ -1788,7 +1939,7 @@ class NativeLauncherApp:
         var_s = tk.BooleanVar(value=False)
         chk_s = tk.Checkbutton(
             form,
-            text="Salva credenziali",
+            text=self.tr("cred_modal_save"),
             variable=var_s,
             font=self.font_link,
             fg=COLOR_TEXT_MAIN,
@@ -1821,7 +1972,7 @@ class NativeLauncherApp:
 
         tk.Button(
             btn_box,
-            text="Annulla",
+            text=self.tr("modal_cancel"),
             font=self.font_btn_action,
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BTN_SECONDARY,
@@ -1837,7 +1988,7 @@ class NativeLauncherApp:
 
         tk.Button(
             btn_box,
-            text="Connetti",
+            text="Connetti" if self.lang == "it" else "Connect",
             font=self.font_btn_action,
             fg="#ffffff",
             bg=COLOR_BTN_CONNECT,
@@ -1863,11 +2014,15 @@ class NativeLauncherApp:
     # --- System Actions (Reboot / Poweroff) ---
 
     def confirm_reboot(self):
-        if messagebox.askyesno("Riavvio", "Sei sicuro di voler riavviare il thin client?"):
+        title = self.tr("btn_reboot")
+        msg = self.tr("confirm_reboot_msg")
+        if messagebox.askyesno(title, msg):
             threading.Thread(target=lambda: self._api_post("/api/system/reboot"), daemon=True).start()
 
     def confirm_poweroff(self):
-        if messagebox.askyesno("Spegnimento", "Sei sicuro di voler spegnere completamente il thin client?"):
+        title = self.tr("btn_poweroff")
+        msg = self.tr("confirm_poweroff_msg")
+        if messagebox.askyesno(title, msg):
             threading.Thread(target=lambda: self._api_post("/api/system/poweroff"), daemon=True).start()
 
     def _center_window(self, win, w, h):

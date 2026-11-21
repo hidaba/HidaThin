@@ -4,21 +4,21 @@
 <div class="screen-center">
     <div class="card card-wide">
         <div class="card-header-bar">
-            <h2>Gestione PC RDP</h2>
-            <button class="btn btn-primary" onclick="openHostModal()">+ Aggiungi Nuovo PC</button>
+            <h2>{{ t('hosts_title') }}</h2>
+            <button class="btn btn-primary" onclick="openHostModal()">{{ t('hosts_btn_add') }}</button>
         </div>
 
         <div class="table-container">
             <table class="table-wifi">
                 <thead>
                     <tr>
-                        <th>Nome</th>
-                        <th>Hostname MagicDNS</th>
-                        <th>IP Tailscale</th>
-                        <th>Utente predefinito</th>
-                        <th>Porta</th>
-                        <th>Predefinito</th>
-                        <th>Azioni</th>
+                        <th>{{ t('col_name') }}</th>
+                        <th>{{ t('col_hostname') }}</th>
+                        <th>{{ t('col_ip') }}</th>
+                        <th>{{ t('col_user') }}</th>
+                        <th>{{ t('col_port') }}</th>
+                        <th>{{ t('col_default') }}</th>
+                        <th>{{ t('col_actions') }}</th>
                     </tr>
                 </thead>
                 <tbody id="hosts-table-body">
@@ -30,29 +30,29 @@
                         <td>
                             {{ host.username or '--' }}
                             {% if host.has_password %}
-                            <span title="Password salvata" style="color: #4ade80; margin-left: 6px; font-size: 0.85em;">🔒 Salvata</span>
+                            <span title="{{ t('pwd_saved_tag') }}" style="color: #4ade80; margin-left: 6px; font-size: 0.85em;">{{ t('pwd_saved_tag') }}</span>
                             {% endif %}
                         </td>
                         <td>{{ host.port or 3389 }}</td>
                         <td>
                             {% if key == default_host %}
-                            <span class="tag-default">Predefinito</span>
+                            <span class="tag-default">{{ t('default_badge') }}</span>
                             {% else %}
-                            <button class="btn btn-small btn-secondary" onclick="setDefaultHost('{{ key }}')">Imposta</button>
+                            <button class="btn btn-small btn-secondary" onclick="setDefaultHost('{{ key }}')">{{ t('btn_set_default') }}</button>
                             {% endif %}
                         </td>
                         <td>
-                            <button class="btn btn-small btn-secondary" onclick="testHostReachability('{{ host.hostname }}', '{{ host.ip or '' }}')">Ping</button>
+                            <button class="btn btn-small btn-secondary" onclick="testHostReachability('{{ host.hostname }}', '{{ host.ip or '' }}')">{{ t('btn_ping') }}</button>
                             <button class="btn btn-small btn-secondary btn-edit-host"
-                                    data-key="{{ key }}"
-                                    data-name="{{ host.name }}"
-                                    data-hostname="{{ host.hostname }}"
-                                    data-ip="{{ host.ip or '' }}"
-                                    data-port="{{ host.port or 3389 }}"
-                                    data-username="{{ host.username or '' }}"
-                                    data-has-password="{{ '1' if host.has_password else '0' }}"
-                                    onclick="editHostFromButton(this)">Modifica</button>
-                            <button class="btn btn-small btn-danger" onclick="deleteHost('{{ key }}')">Elimina</button>
+                                     data-key="{{ key }}"
+                                     data-name="{{ host.name }}"
+                                     data-hostname="{{ host.hostname }}"
+                                     data-ip="{{ host.ip or '' }}"
+                                     data-port="{{ host.port or 3389 }}"
+                                     data-username="{{ host.username or '' }}"
+                                     data-has-password="{{ '1' if host.has_password else '0' }}"
+                                     onclick="editHostFromButton(this)">{{ t('btn_edit') }}</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteHost('{{ key }}')">{{ t('btn_delete') }}</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -61,7 +61,7 @@
         </div>
 
         <div style="margin-top: 25px; display: flex; justify-content: space-between;">
-            <a href="/" class="btn btn-secondary">◄ Torna al Menu Principale</a>
+            <a href="/" class="btn btn-secondary">{{ t('btn_back_main') }}</a>
         </div>
     </div>
 </div>
@@ -69,54 +69,54 @@
 <!-- Modal Aggiungi/Modifica PC -->
 <div id="host-modal" class="modal-backdrop" style="display: none;">
     <div class="modal-box">
-        <h3 id="host-modal-title">Configura PC Remoto</h3>
+        <h3 id="host-modal-title">{{ t('modal_host_title') }}</h3>
         <input type="hidden" id="host-key">
         
         <div class="form-group">
-            <label for="host-name">Nome visualizzato:</label>
-            <input type="text" id="host-name" class="input-text" placeholder="Es. PC Mimmo">
+            <label for="host-name">{{ t('modal_host_name') }}</label>
+            <input type="text" id="host-name" class="input-text" placeholder="{{ t('modal_host_name_ph') }}">
         </div>
         <div class="form-group">
-            <label for="host-hostname">Hostname MagicDNS / Tailscale:</label>
-            <input type="text" id="host-hostname" class="input-text" placeholder="Es. pc-mimmo">
+            <label for="host-hostname">{{ t('modal_host_hostname') }}</label>
+            <input type="text" id="host-hostname" class="input-text" placeholder="{{ t('modal_host_hostname_ph') }}">
         </div>
         <div class="form-group">
-            <label for="host-ip">Indirizzo IP Tailscale (opzionale):</label>
-            <input type="text" id="host-ip" class="input-text" placeholder="Es. 100.64.0.7">
+            <label for="host-ip">{{ t('modal_host_ip') }}</label>
+            <input type="text" id="host-ip" class="input-text" placeholder="{{ t('modal_host_ip_ph') }}">
         </div>
         <div class="form-group">
-            <label for="host-username">Nome Utente Windows predefinito (opzionale):</label>
-            <input type="text" id="host-username" class="input-text" placeholder="Es. hidab">
+            <label for="host-username">{{ t('modal_host_username') }}</label>
+            <input type="text" id="host-username" class="input-text" placeholder="{{ t('modal_host_username_ph') }}">
         </div>
         <div class="form-group">
-            <label for="host-password">Password Windows salvata (opzionale):</label>
+            <label for="host-password">{{ t('modal_host_password') }}</label>
             <div style="position: relative; display: flex; align-items: center;">
-                <input type="password" id="host-password" class="input-text" placeholder="Lascia vuoto per non modificare" style="padding-right: 48px;">
+                <input type="password" id="host-password" class="input-text" placeholder="{{ t('modal_host_pwd_placeholder') }}" style="padding-right: 48px;">
                 <button type="button" class="btn-toggle-eye" onclick="toggleHostPasswordVisibility()" title="Mostra / Nascondi password" tabindex="-1">
                     👁
                 </button>
             </div>
             <div id="host-saved-pwd-notice" style="display: none; margin-top: 6px; font-size: 0.88em; color: #4ade80;">
-                <span>🔒 Una password è già salvata. Lascia il campo vuoto per mantenerla.</span>
+                <span>{{ t('modal_host_pwd_saved') }}</span>
                 <div style="margin-top: 4px;">
                     <label style="cursor: pointer; color: #f87171;">
-                        <input type="checkbox" id="host-clear-password" onchange="onClearPasswordToggle(this.checked)"> Elimina password salvata
+                        <input type="checkbox" id="host-clear-password" onchange="onClearPasswordToggle(this.checked)"> {{ t('modal_host_pwd_delete') }}
                     </label>
                 </div>
             </div>
         </div>
         <div class="form-group">
-            <label for="host-port">Porta RDP:</label>
+            <label for="host-port">{{ t('col_port') }}:</label>
             <input type="number" id="host-port" class="input-text" value="3389">
         </div>
         <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="host-default" style="transform: scale(1.3);">
-            <label for="host-default">Imposta come PC predefinito all'avvio</label>
+            <label for="host-default">{{ t('set_as_default') }}</label>
         </div>
 
         <div class="modal-buttons" style="margin-top: 20px;">
-            <button class="btn btn-secondary" onclick="closeHostModal()">Annulla</button>
-            <button class="btn btn-primary" onclick="saveHost()">Salva Configurazione</button>
+            <button class="btn btn-secondary" onclick="closeHostModal()">{{ t('modal_cancel') }}</button>
+            <button class="btn btn-primary" onclick="saveHost()">{{ t('modal_save') }}</button>
         </div>
     </div>
 </div>
@@ -125,14 +125,14 @@
 {% block scripts %}
 <script>
 function openHostModal() {
-    document.getElementById('host-modal-title').innerText = "Aggiungi Nuovo PC";
+    document.getElementById('host-modal-title').innerText = tr('hosts_btn_add', "+ Aggiungi Nuovo PC");
     document.getElementById('host-key').value = "";
     document.getElementById('host-name').value = "";
     document.getElementById('host-hostname').value = "";
     document.getElementById('host-ip').value = "";
     document.getElementById('host-username').value = "";
     document.getElementById('host-password').value = "";
-    document.getElementById('host-password').placeholder = "Password Windows (opzionale)";
+    document.getElementById('host-password').placeholder = tr('cred_pass_placeholder', "Password Windows (opzionale)");
     document.getElementById('host-password').disabled = false;
     document.getElementById('host-saved-pwd-notice').style.display = "none";
     document.getElementById('host-clear-password').checked = false;
@@ -154,7 +154,7 @@ function editHostFromButton(btn) {
     const username = btn.getAttribute('data-username');
     const hasPassword = btn.getAttribute('data-has-password') === '1';
 
-    document.getElementById('host-modal-title').innerText = `Modifica ${name}`;
+    document.getElementById('host-modal-title').innerText = `${tr('btn_edit', 'Modifica')} ${name}`;
     document.getElementById('host-key').value = key;
     document.getElementById('host-name').value = name || "";
     document.getElementById('host-hostname').value = hostname || "";
@@ -171,10 +171,10 @@ function editHostFromButton(btn) {
 
     if (hasPassword) {
         pwdNotice.style.display = "block";
-        document.getElementById('host-password').placeholder = "Lascia vuoto per mantenere la password salvata";
+        document.getElementById('host-password').placeholder = tr('modal_host_pwd_placeholder', "Lascia vuoto per non modificare");
     } else {
         pwdNotice.style.display = "none";
-        document.getElementById('host-password').placeholder = "Password Windows (opzionale)";
+        document.getElementById('host-password').placeholder = tr('cred_pass_placeholder', "Password Windows (opzionale)");
     }
 
     document.getElementById('host-modal').style.display = 'flex';

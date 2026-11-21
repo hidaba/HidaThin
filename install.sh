@@ -202,6 +202,7 @@ if [ ! -f "$INSTALL_DIR/config/settings.yaml" ]; then
     else
         cat << 'EOF' > "$INSTALL_DIR/config/settings.yaml"
 version: 1
+language: "it"
 rdp_client: "hidathin-rdp"
 profile: "balanced"
 resolution: "auto"

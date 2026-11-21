@@ -3,75 +3,91 @@
 {% block content %}
 <div class="screen-center">
     <div class="card card-wide">
-        <h2>Impostazioni e Profili Prestazioni</h2>
-        <p class="card-subtitle">Ottimizzazione grafica e parametri FreeRDP per Raspberry Pi 3</p>
+        <h2>{{ t('settings_title') }}</h2>
+        <p class="card-subtitle">{{ t('settings_subtitle') }}</p>
 
         <form id="settings-form" onsubmit="saveSettingsForm(event)">
-            <div class="form-group">
-                <label for="setting-rdp-client"><strong>Programma RDP (Client):</strong></label>
-                <select id="setting-rdp-client" class="input-text">
-                    <option value="hidathin-rdp" {% if not settings.rdp_client or settings.rdp_client == 'hidathin-rdp' %}selected{% endif %}>
-                        hidathin-rdp (Consigliato - Client nativo Zero-Copy WTware, bassissima latenza ARM64)
+            <!-- System Language Selection -->
+            <div class="form-group" style="background: rgba(30, 41, 59, 0.5); padding: 12px; border-radius: 8px; border: 1px solid var(--card-border); margin-bottom: 20px;">
+                <label for="setting-language"><strong>🌐 {{ t('setting_language') }}</strong></label>
+                <select id="setting-language" class="input-text" style="font-weight: bold;">
+                    <option value="it" {% if not settings.language or settings.language == 'it' %}selected{% endif %}>
+                        🇮🇹 {{ t('lang_it') }}
                     </option>
-                    <option value="xfreerdp3" {% if settings.rdp_client == 'xfreerdp3' %}selected{% endif %}>
-                        xfreerdp3 (Standard FreeRDP 3.x upstream)
+                    <option value="en" {% if settings.language == 'en' %}selected{% endif %}>
+                        🇬🇧 {{ t('lang_en') }}
                     </option>
                 </select>
                 <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
-                    Scegli tra il motore nativo Zero-Copy ottimizzato per Raspberry Pi (senza passaggi intermedi di buffer) e il client FreeRDP 3.15 standard.
+                    {{ t('setting_language_help') }}
                 </small>
             </div>
 
             <div class="form-group">
-                <label for="setting-profile"><strong>Profilo RDP:</strong></label>
+                <label for="setting-rdp-client"><strong>{{ t('setting_rdp_client') }}</strong></label>
+                <select id="setting-rdp-client" class="input-text">
+                    <option value="hidathin-rdp" {% if not settings.rdp_client or settings.rdp_client == 'hidathin-rdp' %}selected{% endif %}>
+                        {{ t('rdp_client_hidathin') }}
+                    </option>
+                    <option value="xfreerdp3" {% if settings.rdp_client == 'xfreerdp3' %}selected{% endif %}>
+                        {{ t('rdp_client_xfreerdp3') }}
+                    </option>
+                </select>
+                <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
+                    {{ t('setting_rdp_client_help') }}
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="setting-profile"><strong>{{ t('setting_profile') }}</strong></label>
                 <select id="setting-profile" class="input-text">
                     <option value="performance" {% if settings.profile == 'performance' %}selected{% endif %}>
-                        Prestazioni Elevate (Massima fluidità, compressione elevata, effetti Windows disabilitati)
+                        {{ t('profile_performance') }}
                     </option>
                     <option value="balanced" {% if settings.profile == 'balanced' %}selected{% endif %}>
-                        Bilanciato - Consigliato (Font nitidi ClearType, cache bitmap, minima CPU)
+                        {{ t('profile_balanced') }}
                     </option>
                     <option value="quality" {% if settings.profile == 'quality' %}selected{% endif %}>
-                        Qualità Massima (GFX AVC444 ad alta fedeltà colore, effetti visivi completi)
+                        {{ t('profile_quality') }}
                     </option>
                 </select>
             </div>
 
             <div class="form-row-2">
                 <div class="form-group">
-                    <label for="setting-resolution"><strong>Risoluzione Display:</strong></label>
+                    <label for="setting-resolution"><strong>{{ t('setting_resolution') }}</strong></label>
                     <select id="setting-resolution" class="input-text">
                         <option value="auto" {% if settings.resolution == 'auto' %}selected{% endif %}>
-                            Automatica (Rileva schermo: {{ metrics.resolution }})
+                            {{ t('resolution_auto', res=metrics.resolution) }}
                         </option>
                         <option value="1920x1080" {% if settings.resolution == '1920x1080' %}selected{% endif %}>1920x1080 (Full HD)</option>
                         <option value="1600x900" {% if settings.resolution == '1600x900' %}selected{% endif %}>1600x900 (HD+)</option>
-                        <option value="1280x720" {% if settings.resolution == '1280x720' %}selected{% endif %}>1280x720 (720p - Molto leggero)</option>
+                        <option value="1280x720" {% if settings.resolution == '1280x720' %}selected{% endif %}>1280x720 (720p)</option>
                     </select>
                 </div>
 
                 <div class="form-group">
-                    <label for="setting-bpp"><strong>Profondità Colore (bpp):</strong></label>
+                    <label for="setting-bpp"><strong>{{ t('setting_color_depth') }}</strong></label>
                     <select id="setting-bpp" class="input-text">
-                        <option value="16" {% if settings.color_depth == 16 %}selected{% endif %}>16 bit (Bassa banda)</option>
-                        <option value="24" {% if settings.color_depth == 24 %}selected{% endif %}>24 bit (Standard)</option>
-                        <option value="32" {% if settings.color_depth == 32 %}selected{% endif %}>32 bit (Consigliato - Testo nitido & ClearType)</option>
+                        <option value="16" {% if settings.color_depth == 16 %}selected{% endif %}>{{ t('color_depth_16') }}</option>
+                        <option value="24" {% if settings.color_depth == 24 %}selected{% endif %}>{{ t('color_depth_24') }}</option>
+                        <option value="32" {% if settings.color_depth == 32 %}selected{% endif %}>{{ t('color_depth_32') }}</option>
                     </select>
                 </div>
             </div>
 
             <div class="form-row-2" style="margin-top: 15px;">
                 <div class="form-group">
-                    <label for="setting-overscan"><strong>Compensazione Bordi / Overscan TV:</strong></label>
+                    <label for="setting-overscan"><strong>{{ t('setting_overscan') }}</strong></label>
                     <select id="setting-overscan" class="input-text" onchange="previewOverscan(this.value)">
-                        <option value="none" {% if not settings.overscan or settings.overscan == 'none' %}selected{% endif %}>Disattivata - 1:1 Pixel-Perfect (Consigliata per massima nitidezza caratteri)</option>
-                        <option value="auto" {% if settings.overscan == 'auto' %}selected{% endif %}>Automatica (1:1 Full RGB HDMI)</option>
-                        <option value="light" {% if settings.overscan == 'light' %}selected{% endif %}>Leggera (~2.5% margini - Solo per TV con zoom fisso)</option>
-                        <option value="medium" {% if settings.overscan == 'medium' %}selected{% endif %}>Marcata (~5% margini - Solo per TV con zoom fisso)</option>
-                        <option value="heavy" {% if settings.overscan == 'heavy' %}selected{% endif %}>Massima (~7.5% margini - Solo per TV con zoom elevato)</option>
+                        <option value="none" {% if not settings.overscan or settings.overscan == 'none' %}selected{% endif %}>{{ t('overscan_none') }}</option>
+                        <option value="auto" {% if settings.overscan == 'auto' %}selected{% endif %}>{{ t('overscan_auto') }}</option>
+                        <option value="light" {% if settings.overscan == 'light' %}selected{% endif %}>{{ t('overscan_light') }}</option>
+                        <option value="medium" {% if settings.overscan == 'medium' %}selected{% endif %}>{{ t('overscan_medium') }}</option>
+                        <option value="heavy" {% if settings.overscan == 'heavy' %}selected{% endif %}>{{ t('overscan_heavy') }}</option>
                     </select>
                     <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
-                        Per testi nitidi come su Windows RDP usa <strong>Disattivata (1:1 Pixel-Perfect)</strong> (e imposta il formato immagine della TV su "Adatta a schermo" / "16:9").
+                        {{ t('setting_overscan_help') }}
                     </small>
                 </div>
                 <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
@@ -82,12 +98,12 @@
             <div class="form-row-2" style="margin-top: 10px;">
                 <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="setting-sound" style="transform:scale(1.3);" {% if settings.sound %}checked{% endif %}>
-                    <label for="setting-sound">Abilita reindirizzamento Audio (ALSA)</label>
+                    <label for="setting-sound">{{ t('setting_sound') }}</label>
                 </div>
 
                 <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="setting-reconnect" style="transform:scale(1.3);" {% if settings.auto_reconnect %}checked{% endif %}>
-                    <label for="setting-reconnect">Riconnessione automatica in caso di caduta linea</label>
+                    <label for="setting-reconnect">{{ t('setting_reconnect') }}</label>
                 </div>
             </div>
 
@@ -97,9 +113,9 @@
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                 <div>
                     <h3 style="color: #60a5fa; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
-                        <span>🌐 Tailscale VPN</span>
+                        <span>{{ t('ts_section_title') }}</span>
                     </h3>
-                    <p class="card-subtitle" style="margin-top: 4px;">Configurazione, stato e gestione connessione alla rete mesh privata</p>
+                    <p class="card-subtitle" style="margin-top: 4px;">{{ t('ts_section_sub') }}</p>
                 </div>
                 <div id="ts-badge" class="status-badge {% if tailscale.connected %}badge-connected{% elif tailscale.status == 'Connessione in corso' %}badge-pending{% elif not tailscale.enabled %}badge-disconnected{% else %}badge-disconnected{% endif %}">
                     <span class="badge-dot">●</span> <span id="ts-badge-text">{{ tailscale.status }}</span>
@@ -109,51 +125,51 @@
             <div class="form-row-2">
                 <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="setting-tailscale-enabled" style="transform:scale(1.3);" {% if tailscale.enabled %}checked{% endif %} onchange="toggleTailscaleSwitch()">
-                    <label for="setting-tailscale-enabled"><strong>Abilita Tailscale VPN</strong></label>
+                    <label for="setting-tailscale-enabled"><strong>{{ t('ts_enable') }}</strong></label>
                 </div>
             </div>
 
             <div id="ts-auth-banner" style="margin-top: 10px; display: {% if tailscale.auth_url %}block{% else %}none{% endif %}; background: rgba(37, 99, 235, 0.2); border: 1px solid #3b82f6; border-radius: 8px; padding: 12px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <div>
-                        <strong style="color: #93c5fd;">Autenticazione richiesta per accedere alla Tailnet:</strong>
-                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 4px 0 0 0;">Apri il link per autorizzare questo thin client nel pannello Tailscale.</p>
+                        <strong style="color: #93c5fd;">{{ t('ts_auth_required') }}</strong>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 4px 0 0 0;">{{ t('ts_auth_help') }}</p>
                     </div>
                     <a id="ts-auth-link" href="{{ tailscale.auth_url or '#' }}" target="_blank" class="btn btn-primary" style="padding: 6px 14px; font-size: 0.9rem;">
-                        🌐 Completa Accesso
+                        {{ t('ts_complete_login') }}
                     </a>
                 </div>
             </div>
 
             <div class="credentials-box" style="margin-top: 15px; background: #0b1329;">
-                <h4 style="color: #93c5fd; margin-bottom: 8px; font-size: 0.95rem;">Dettagli Dispositivo & Rete Mesh:</h4>
+                <h4 style="color: #93c5fd; margin-bottom: 8px; font-size: 0.95rem;">{{ t('ts_details_title') }}</h4>
                 <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse;">
                     <tr>
-                        <td style="color: var(--text-secondary); padding: 4px 0; width: 35%;">Indirizzo IP Tailscale:</td>
-                        <td style="font-family: monospace; color: #4ade80;"><strong id="ts-info-ip">{{ tailscale.ip or 'Non assegnato' }}</strong></td>
+                        <td style="color: var(--text-secondary); padding: 4px 0; width: 35%;">{{ t('ts_ip_label') }}</td>
+                        <td style="font-family: monospace; color: #4ade80;"><strong id="ts-info-ip">{{ tailscale.ip or t('ts_not_assigned') }}</strong></td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary); padding: 4px 0;">Nome Dispositivo:</td>
+                        <td style="color: var(--text-secondary); padding: 4px 0;">{{ t('ts_hostname_label') }}</td>
                         <td style="font-family: monospace; color: #93c5fd;"><strong id="ts-info-hostname">{{ tailscale.hostname or 'N/D' }}</strong></td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary); padding: 4px 0;">Rete Tailnet:</td>
+                        <td style="color: var(--text-secondary); padding: 4px 0;">{{ t('ts_tailnet_label') }}</td>
                         <td style="color: var(--text-primary);"><strong id="ts-info-tailnet">{{ tailscale.tailnet or 'N/D' }}</strong></td>
                     </tr>
                 </table>
 
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px;">
                     <button type="button" class="btn btn-primary" onclick="connectTailscaleAction()" id="btn-ts-connect" style="background: linear-gradient(135deg, #10b981, #059669);">
-                        ⚡ Connetti
+                        {{ t('ts_btn_connect') }}
                     </button>
                     <button type="button" class="btn btn-secondary" onclick="disconnectTailscaleAction()" id="btn-ts-disconnect">
-                        ⏹ Disconnetti
+                        {{ t('ts_btn_disconnect') }}
                     </button>
                     <button type="button" class="btn btn-secondary" onclick="refreshTailscaleAction()" id="btn-ts-refresh">
-                        🔄 Aggiorna Stato
+                        {{ t('ts_btn_refresh') }}
                     </button>
                     <button type="button" class="btn btn-secondary" onclick="loginTailscaleAction()" id="btn-ts-login">
-                        🔑 Accedi / Login
+                        {{ t('ts_btn_login') }}
                     </button>
                     <span id="ts-action-msg" style="font-size: 0.85rem; color: var(--text-secondary);"></span>
                 </div>
@@ -165,50 +181,50 @@
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                 <div>
                     <h3 style="color: #60a5fa; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
-                        <span>📡 Supervisione e Assistenza Remota (VNC)</span>
+                        <span>{{ t('vnc_section_title') }}</span>
                     </h3>
-                    <p class="card-subtitle" style="margin-top: 4px;">Accesso al display fisico (:0) per assistenza remota all'operatore</p>
+                    <p class="card-subtitle" style="margin-top: 4px;">{{ t('vnc_section_sub') }}</p>
                 </div>
                 <div class="status-badge {% if vnc.active %}badge-connected{% else %}badge-disconnected{% endif %}">
-                    <span class="badge-dot">●</span> {{ 'Servizio Attivo' if vnc.active else 'Non Attivo' }}
+                    <span class="badge-dot">●</span> {{ t('vnc_service_active') if vnc.active else t('vnc_service_inactive') }}
                 </div>
             </div>
 
             <div class="form-row-2">
                 <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="setting-vnc-enabled" style="transform:scale(1.3);" {% if settings.vnc.enabled %}checked{% endif %} onchange="toggleVncFields()">
-                    <label for="setting-vnc-enabled"><strong>Abilita Server VNC (Porta 5900)</strong></label>
+                    <label for="setting-vnc-enabled"><strong>{{ t('vnc_enable') }}</strong></label>
                 </div>
 
                 <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="setting-vnc-tailscale-only" style="transform:scale(1.3);" {% if settings.vnc.bind_tailscale_only %}checked{% endif %}>
-                    <label for="setting-vnc-tailscale-only"><strong>Limita a VPN Tailscale (Consigliato)</strong></label>
+                    <label for="setting-vnc-tailscale-only"><strong>{{ t('vnc_tailscale_only') }}</strong></label>
                 </div>
             </div>
 
             <div id="vnc-details-box" style="margin-top: 15px; {% if not settings.vnc.enabled %}display:none;{% endif %}">
                 <div class="form-group">
-                    <label for="setting-vnc-password"><strong>Password VNC di Accesso:</strong></label>
-                    <input type="text" id="setting-vnc-password" class="input-text" placeholder="Lascia vuoto per non modificare (predefinita: thinclient)">
+                    <label for="setting-vnc-password"><strong>{{ t('vnc_pwd_label') }}</strong></label>
+                    <input type="text" id="setting-vnc-password" class="input-text" placeholder="{{ t('vnc_pwd_placeholder') }}">
                     <small style="color: var(--text-secondary); display:block; margin-top:4px;">
-                        Autenticazione richiesta da qualsiasi client VNC (RealVNC Viewer, Remmina, TightVNC).
+                        {{ t('vnc_pwd_help') }}
                     </small>
                 </div>
 
                 <div class="credentials-box" style="margin-top: 15px; background: #0b1329;">
-                    <h4 style="color: #93c5fd; margin-bottom: 8px; font-size: 0.95rem;">Informazioni di Connessione per il Tecnico:</h4>
+                    <h4 style="color: #93c5fd; margin-bottom: 8px; font-size: 0.95rem;">{{ t('vnc_info_title') }}</h4>
                     <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse;">
                         <tr>
-                            <td style="color: var(--text-secondary); padding: 4px 0;">Indirizzo MagicDNS:</td>
+                            <td style="color: var(--text-secondary); padding: 4px 0;">{{ t('vnc_magicdns_label') }}</td>
                             <td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_host }}</strong></td>
                         </tr>
                         <tr>
-                            <td style="color: var(--text-secondary); padding: 4px 0;">Indirizzo IP Tailscale:</td>
-                            <td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_ip or 'In attesa IP Tailscale...' }}</strong></td>
+                            <td style="color: var(--text-secondary); padding: 4px 0;">{{ t('vnc_ip_label') }}</td>
+                            <td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_ip or '--' }}</strong></td>
                         </tr>
                         <tr>
-                            <td style="color: var(--text-secondary); padding: 4px 0;">Client Connessi:</td>
-                            <td><strong style="color: {% if vnc.clients_count > 0 %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ vnc.clients_count }} attivi</strong></td>
+                            <td style="color: var(--text-secondary); padding: 4px 0;">{{ t('vnc_clients_label') }}</td>
+                            <td><strong style="color: {% if vnc.clients_count > 0 %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ t('vnc_clients_active', count=vnc.clients_count) }}</strong></td>
                         </tr>
                     </table>
                 </div>
@@ -220,33 +236,32 @@
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                 <div>
                     <h3 style="color: #60a5fa; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
-                        <span>🛡 Protezione Disco & Aggiornamento Sistema Operativo</span>
+                        <span>{{ t('fs_section_title') }}</span>
                     </h3>
-                    <p class="card-subtitle" style="margin-top: 4px;">Protezione SD in Sola Lettura (Soluzione B) e aggiornamenti pacchetti Debian</p>
+                    <p class="card-subtitle" style="margin-top: 4px;">{{ t('fs_section_sub') }}</p>
                 </div>
                 <div id="fs-badge" class="status-badge {% if fs.root_ro %}badge-connected{% else %}badge-pending{% endif %}">
-                    <span class="badge-dot">●</span> <span id="fs-badge-text">{{ 'SOLA LETTURA (SD Protetta)' if fs.root_ro else 'SCRITTURA (RW)' }}</span>
+                    <span class="badge-dot">●</span> <span id="fs-badge-text">{{ t('fs_status_ro') if fs.root_ro else t('fs_status_rw') }}</span>
                 </div>
             </div>
 
             <div class="credentials-box" style="margin-top: 12px; background: #0b1329;">
                 <p style="font-size: 0.9rem; margin-bottom: 12px; color: var(--text-secondary); line-height: 1.5;">
-                    Il sistema operativo e i binari sono protetti da spegnimenti bruschi tramite montaggio in <strong>Sola Lettura (RO)</strong>.
-                    I file di configurazione, Wi-Fi e credenziali Tailscale risiedono sulla partizione persistente <code>/data</code>.
+                    {{ t('fs_desc') }}
                 </p>
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                     <button type="button" class="btn btn-secondary" onclick="toggleFsRemount()" id="btn-toggle-fs">
-                        {% if fs.root_ro %}🔓 Sblocca Temporaneamente in Scrittura (RW){% else %}🔒 Blocca in Sola Lettura (RO){% endif %}
+                        {% if fs.root_ro %}{{ t('fs_btn_unlock_rw') }}{% else %}{{ t('fs_btn_lock_ro') }}{% endif %}
                     </button>
                     <button type="button" class="btn btn-primary" onclick="confirmStartOsUpdate()" id="btn-start-update" style="background: linear-gradient(135deg, #2563eb, #1d4ed8);">
-                        ⚡ Aggiorna Sistema Operativo (Debian)
+                        {{ t('fs_btn_start_update') }}
                     </button>
                 </div>
             </div>
 
             <div class="modal-buttons" style="margin-top: 30px;">
-                <a href="/" class="btn btn-secondary">◄ Annulla</a>
-                <button type="submit" class="btn btn-primary">Salva Impostazioni</button>
+                <a href="/" class="btn btn-secondary">{{ t('btn_cancel') }}</a>
+                <button type="submit" class="btn btn-primary">{{ t('btn_save_settings') }}</button>
             </div>
         </form>
     </div>
@@ -256,30 +271,30 @@
 <div id="update-modal" class="modal-backdrop" style="display: none;">
     <div class="modal-box" style="max-width: 680px; width: 95%;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-            <h3 id="update-modal-title" style="margin: 0; color: #60a5fa;">⚡ Aggiornamento Sistema Operativo Debian</h3>
-            <span id="update-modal-badge" class="status-badge badge-pending" style="font-size: 0.8rem; padding: 4px 10px;">IN CORSO</span>
+            <h3 id="update-modal-title" style="margin: 0; color: #60a5fa;">{{ t('update_modal_title') }}</h3>
+            <span id="update-modal-badge" class="status-badge badge-pending" style="font-size: 0.8rem; padding: 4px 10px;">{{ t('update_badge_running') }}</span>
         </div>
         
-        <div id="update-step-label" class="step-indicator">Inizializzazione procedura...</div>
+        <div id="update-step-label" class="step-indicator">{{ t('update_step_init') }}</div>
         
         <div class="update-progress-bar-container">
             <div id="update-progress-fill" class="update-progress-fill" style="width: 5%;"></div>
         </div>
 
         <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-secondary); margin-bottom: 6px;">
-            <span id="update-status-detail">Sblocco RW -> apt update -> apt dist-upgrade -> Ripristino RO</span>
+            <span id="update-status-detail">{{ t('update_step_summary') }}</span>
             <span id="update-percent-label">5%</span>
         </div>
 
-        <div id="update-terminal" class="terminal-box">In attesa dell'avvio della procedura apt...</div>
+        <div id="update-terminal" class="terminal-box">{{ t('update_terminal_waiting') }}</div>
 
         <div id="update-reboot-box" style="display:none; margin-top:12px; padding:10px; background: rgba(34, 197, 94, 0.1); border: 1px solid #16a34a; border-radius: 6px; font-size: 0.88rem; color: #86efac;">
-            ✔ Aggiornamento terminato! La scheda SD è stata ripristinata in <strong>Sola Lettura (RO)</strong>. È consigliato riavviare per applicare le modifiche del kernel e delle librerie.
+            {{ t('update_reboot_notice') }}
         </div>
 
         <div class="modal-buttons" style="margin-top: 15px;">
-            <button id="btn-update-reboot" class="btn btn-primary" onclick="rebootAfterUpdate()" style="display: none;">Riavvia Ora</button>
-            <button id="btn-update-close" class="btn btn-secondary" onclick="closeUpdateModal()" disabled>Chiudi</button>
+            <button id="btn-update-reboot" class="btn btn-primary" onclick="rebootAfterUpdate()" style="display: none;">{{ t('update_btn_reboot') }}</button>
+            <button id="btn-update-close" class="btn btn-secondary" onclick="closeUpdateModal()" disabled>{{ t('modal_close') }}</button>
         </div>
     </div>
 </div>
@@ -435,6 +450,7 @@ function loginTailscaleAction() {
 function saveSettingsForm(e) {
     e.preventDefault();
     const rdpPayload = {
+        language: document.getElementById('setting-language') ? document.getElementById('setting-language').value : 'it',
         rdp_client: document.getElementById('setting-rdp-client').value,
         profile: document.getElementById('setting-profile').value,
         resolution: document.getElementById('setting-resolution').value,
@@ -463,7 +479,7 @@ function saveSettingsForm(e) {
     .then(r => r.json())
     .then(data => {
         if (!data.success) {
-            showModal("Errore", data.message);
+            showModal(tr('modal_error', 'Errore'), data.message);
             return;
         }
 
@@ -476,14 +492,15 @@ function saveSettingsForm(e) {
         .then(r => r.json())
         .then(vncData => {
             if (vncData.success) {
-                showModal("Impostazioni", "Impostazioni e configurazione VNC salvate con successo.");
+                showModal(tr('nav_settings', 'Impostazioni'), tr('settings_saved_success', 'Impostazioni e configurazione salvate con successo.'));
+                setTimeout(() => window.location.reload(), 1000);
             } else {
-                showModal("Avviso", "Impostazioni salvate, ma errore VNC: " + vncData.message);
+                showModal(tr('modal_notice', 'Avviso'), "VNC: " + vncData.message);
             }
         });
     })
     .catch(err => {
-        showModal("Errore", "Errore di comunicazione durante il salvataggio.");
+        showModal(tr('modal_error', 'Errore'), tr('modal_error', 'Errore di comunicazione durante il salvataggio.'));
     });
 }
 
@@ -499,12 +516,12 @@ function updateFsBadge(status) {
 
     if (isRootRo) {
         badge.className = 'status-badge badge-connected';
-        badgeText.innerText = 'SOLA LETTURA (SD Protetta)';
-        if (toggleBtn) toggleBtn.innerText = '🔓 Sblocca Temporaneamente in Scrittura (RW)';
+        badgeText.innerText = tr('fs_status_ro', 'SOLA LETTURA (SD Protetta)');
+        if (toggleBtn) toggleBtn.innerText = tr('fs_btn_unlock_rw', '🔓 Sblocca Temporaneamente in Scrittura (RW)');
     } else {
         badge.className = 'status-badge badge-pending';
-        badgeText.innerText = 'SCRITTURA (RW)';
-        if (toggleBtn) toggleBtn.innerText = '🔒 Blocca in Sola Lettura (RO)';
+        badgeText.innerText = tr('fs_status_rw', 'SCRITTURA (RW)');
+        if (toggleBtn) toggleBtn.innerText = tr('fs_btn_lock_ro', '🔒 Blocca in Sola Lettura (RO)');
     }
 }
 

@@ -8,13 +8,13 @@
             <div class="cyber-scanlines"></div>
             <div class="cyber-hero-overlay">
                 <div class="cyber-logo-badge">HiDaThin</div>
-                <div class="cyber-tagline">// NEURAL THIN CLIENT OS • RDP VIA TAILSCALE //</div>
+                <div class="cyber-tagline">{{ t('boot_tagline') }}</div>
             </div>
         </div>
 
         <div class="boot-progress-wrapper cyber-progress-wrap">
             <div class="boot-progress-header">
-                <span id="boot-progress-label" class="cyber-label">INIZIALIZZAZIONE SISTEMA...</span>
+                <span id="boot-progress-label" class="cyber-label">{{ t('boot_init_system') }}</span>
                 <span id="boot-progress-percent" class="cyber-percent">25%</span>
             </div>
             <div class="boot-progress-bar cyber-bar">
@@ -26,8 +26,8 @@
             <div class="boot-check-item item-success cyber-item" id="boot-step-system">
                 <div class="boot-check-icon icon-success cyber-icon">✔</div>
                 <div class="boot-check-text">
-                    <div class="boot-check-title">[01/04] MOTORE KIOSK HIDATHIN</div>
-                    <div class="boot-check-sub" id="boot-step-system-sub">Server Flask e display X11 operativi</div>
+                    <div class="boot-check-title">{{ t('boot_step_kiosk_title') }}</div>
+                    <div class="boot-check-sub" id="boot-step-system-sub">{{ t('boot_step_kiosk_sub') }}</div>
                 </div>
             </div>
 
@@ -36,8 +36,8 @@
                     <div class="mini-spinner cyber-spinner"></div>
                 </div>
                 <div class="boot-check-text">
-                    <div class="boot-check-title">[02/04] CONNESSIONE DI RETE (WI-FI / ETH)</div>
-                    <div class="boot-check-sub" id="boot-step-network-sub">Verifica collegamento in corso...</div>
+                    <div class="boot-check-title">{{ t('boot_step_net_title') }}</div>
+                    <div class="boot-check-sub" id="boot-step-network-sub">{{ t('boot_step_net_sub') }}</div>
                 </div>
             </div>
 
@@ -46,8 +46,8 @@
                     <div class="mini-spinner cyber-spinner"></div>
                 </div>
                 <div class="boot-check-text">
-                    <div class="boot-check-title">[03/04] TUNNEL VPN TAILSCALE WIREGUARD</div>
-                    <div class="boot-check-sub" id="boot-step-tailscale-sub">In attesa del collegamento di rete...</div>
+                    <div class="boot-check-title">{{ t('boot_step_ts_title') }}</div>
+                    <div class="boot-check-sub" id="boot-step-tailscale-sub">{{ t('boot_step_ts_sub') }}</div>
                 </div>
             </div>
 
@@ -56,16 +56,16 @@
                     <div class="mini-spinner cyber-spinner"></div>
                 </div>
                 <div class="boot-check-text">
-                    <div class="boot-check-title">[04/04] VERIFICA HOST RDP REMOTO</div>
-                    <div class="boot-check-sub" id="boot-step-rdp-sub">In attesa del tunnel crittografato...</div>
+                    <div class="boot-check-title">{{ t('boot_step_rdp_title') }}</div>
+                    <div class="boot-check-sub" id="boot-step-rdp-sub">{{ t('boot_step_rdp_sub') }}</div>
                 </div>
             </div>
         </div>
 
         <!-- Fallback controls always accessible -->
         <div id="boot-fallback-actions" class="boot-fallback-actions cyber-fallback" style="display: flex;">
-            <a href="/wifi" class="btn btn-primary cyber-btn">Configura Wi-Fi</a>
-            <button type="button" class="btn btn-secondary cyber-btn-secondary" onclick="dismissBootSplash()">Apri Dashboard</button>
+            <a href="/wifi" class="btn btn-primary cyber-btn">{{ t('boot_btn_wifi') }}</a>
+            <button type="button" class="btn btn-secondary cyber-btn-secondary" onclick="dismissBootSplash()">{{ t('boot_btn_dashboard') }}</button>
         </div>
     </div>
 </div>
@@ -74,12 +74,12 @@
     <div class="card card-main">
         <div class="card-status-grid">
             <div class="status-col">
-                <div class="status-label">Stato Wi-Fi</div>
+                <div class="status-label">{{ t('status_wifi') }}</div>
                 <div class="status-val" id="card-wifi-val">--</div>
                 <div class="status-sub" id="card-wifi-sub">IP: --</div>
             </div>
             <div class="status-col">
-                <div class="status-label">Stato Tailscale</div>
+                <div class="status-label">{{ t('status_ts') }}</div>
                 <div class="status-val" id="card-ts-val">--</div>
                 <div class="status-sub" id="card-ts-sub">IP: --</div>
             </div>
@@ -87,9 +87,9 @@
 
         <div class="selector-box">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <label for="host-selector" class="selector-label" style="margin-bottom: 0;">Seleziona Computer Remoto:</label>
+                <label for="host-selector" class="selector-label" style="margin-bottom: 0;">{{ t('select_remote_pc') }}</label>
                 <button type="button" id="btn-set-default" class="btn-link" style="font-size: 0.85rem; padding: 2px 6px;" onclick="setDefaultHostFromMain()">
-                    ★ Imposta come predefinito
+                    {{ t('set_as_default') }}
                 </button>
             </div>
             <select id="host-selector" class="selector-dropdown" onchange="onHostSelected()" autofocus>
@@ -103,19 +103,19 @@
 
         <div class="credentials-toggle">
             <button type="button" id="btn-toggle-cred" class="btn-link" onclick="toggleCredentials()">
-                Opzioni accesso Windows (opzionale) ▼
+                {{ t('cred_toggle_down') }}
             </button>
             <div id="credentials-box" class="credentials-box" style="display: none;">
                 <div class="input-row">
-                    <input type="text" id="rdp-user" class="input-text" placeholder="Nome Utente Windows (opzionale)" autocomplete="off">
+                    <input type="text" id="rdp-user" class="input-text" placeholder="{{ t('cred_user_placeholder') }}" autocomplete="off">
                 </div>
                 <div class="input-row">
-                    <input type="password" id="rdp-pass" class="input-text" placeholder="Password Windows (opzionale)" autocomplete="off">
+                    <input type="password" id="rdp-pass" class="input-text" placeholder="{{ t('cred_pass_placeholder') }}" autocomplete="off">
                 </div>
                 <div class="input-row checkbox-row">
                     <label class="checkbox-label" for="rdp-save-pass">
                         <input type="checkbox" id="rdp-save-pass" class="checkbox-input">
-                        <span>Salva la password sul thin client</span>
+                        <span>{{ t('save_pass_thinclient') }}</span>
                     </label>
                 </div>
             </div>
@@ -123,25 +123,25 @@
 
         <div class="action-box">
             <button id="btn-connect" class="btn btn-connect" onclick="startConnection()">
-                CONNETTI
+                {{ t('btn_connect') }}
             </button>
         </div>
 
         <div id="connection-overlay" class="connection-overlay" style="display: none;">
             <div class="spinner"></div>
-            <div class="connecting-title" id="connecting-title">Connessione in corso...</div>
-            <div class="connecting-sub" id="connecting-sub">Avvio FreeRDP via Tailscale</div>
-            <button class="btn btn-danger" style="margin-top: 20px;" onclick="cancelConnection()">Annulla</button>
+            <div class="connecting-title" id="connecting-title">{{ t('connecting_title') }}</div>
+            <div class="connecting-sub" id="connecting-sub">{{ t('connecting_sub') }}</div>
+            <button class="btn btn-danger" style="margin-top: 20px;" onclick="cancelConnection()">{{ t('btn_cancel') }}</button>
         </div>
 
         <hr class="card-divider">
 
         <div class="quick-nav-grid">
-            <a href="/wifi" class="btn btn-secondary">Configura Wi-Fi</a>
-            <a href="/hosts" class="btn btn-secondary">Gestisci PC</a>
-            <a href="/diagnostics" class="btn btn-secondary">Diagnostica</a>
-            <button class="btn btn-secondary" onclick="confirmReboot()">Riavvia</button>
-            <button class="btn btn-secondary btn-danger-soft" onclick="confirmPoweroff()">Spegni</button>
+            <a href="/wifi" class="btn btn-secondary">{{ t('boot_btn_wifi') }}</a>
+            <a href="/hosts" class="btn btn-secondary">{{ t('nav_hosts') }}</a>
+            <a href="/diagnostics" class="btn btn-secondary">{{ t('nav_diagnostics') }}</a>
+            <button class="btn btn-secondary" onclick="confirmReboot()">{{ t('btn_reboot') }}</button>
+            <button class="btn btn-secondary btn-danger-soft" onclick="confirmPoweroff()">{{ t('btn_poweroff') }}</button>
         </div>
     </div>
 </div>
@@ -152,9 +152,9 @@
         <div class="credentials-modal-header">
             <div class="credentials-modal-icon">🔐</div>
             <div>
-                <h3 id="cred-modal-title" style="margin: 0; color: #60a5fa; font-size: 1.25rem;">Connessione RDP – PC Remoto</h3>
+                <h3 id="cred-modal-title" style="margin: 0; color: #60a5fa; font-size: 1.25rem;">{{ t('cred_modal_title') }}</h3>
                 <div id="cred-modal-subtitle" style="font-size: 0.9rem; color: #94a3b8; margin-top: 3px;">
-                    Inserisci le credenziali Windows per connetterti
+                    {{ t('cred_modal_prompt') }}
                 </div>
             </div>
         </div>
@@ -165,7 +165,7 @@
         <div id="cred-modal-alert" class="cred-alert-box" style="display: none;">
             <div class="cred-alert-icon">⚠️</div>
             <div class="cred-alert-text" id="cred-modal-alert-text">
-                Password errata. Riprova.
+                {{ t('cred_modal_failed') }}
             </div>
         </div>
 
@@ -182,17 +182,17 @@
         <form id="credentials-form" onsubmit="submitCredentialsModal(event)">
             <div class="form-group" style="margin-top: 15px;">
                 <label for="cred-modal-user" style="color: #cbd5e1; font-size: 0.95rem; font-weight: 500;">
-                    Username:
+                    {{ t('cred_modal_user') }}
                 </label>
-                <input type="text" id="cred-modal-user" class="input-text" placeholder="Nome Utente Windows" autocomplete="username">
+                <input type="text" id="cred-modal-user" class="input-text" placeholder="{{ t('cred_user_placeholder') }}" autocomplete="username">
             </div>
 
             <div class="form-group">
                 <label for="cred-modal-pass" style="color: #cbd5e1; font-size: 0.95rem; font-weight: 500;">
-                    Password:
+                    {{ t('cred_modal_pass') }}
                 </label>
                 <div style="position: relative; display: flex; align-items: center;">
-                    <input type="password" id="cred-modal-pass" class="input-text" placeholder="Password Windows" autocomplete="current-password" style="padding-right: 48px;">
+                    <input type="password" id="cred-modal-pass" class="input-text" placeholder="{{ t('cred_pass_placeholder') }}" autocomplete="current-password" style="padding-right: 48px;">
                     <button type="button" id="btn-toggle-modal-pass" class="btn-toggle-eye" onclick="toggleModalPassVisibility()" title="Mostra / Nascondi password" tabindex="-1">
                         👁
                     </button>
@@ -202,14 +202,14 @@
             <div class="form-group checkbox-row" style="margin-top: 10px; margin-bottom: 22px;">
                 <label class="checkbox-label" for="cred-modal-save">
                     <input type="checkbox" id="cred-modal-save" class="checkbox-input">
-                    <span>Salva credenziali</span>
+                    <span>{{ t('cred_modal_save') }}</span>
                 </label>
             </div>
 
             <div class="modal-buttons">
-                <button type="button" class="btn btn-secondary" onclick="closeCredentialsModal()">Annulla</button>
+                <button type="button" class="btn btn-secondary" onclick="closeCredentialsModal()">{{ t('modal_cancel') }}</button>
                 <button type="submit" id="btn-cred-submit" class="btn btn-primary" style="min-width: 130px;">
-                    Connetti
+                    {{ t('btn_connect') }}
                 </button>
             </div>
         </form>
@@ -1016,16 +1016,16 @@ function runCyberpunkBootSequence(initialData, bootId) {
 
 
 function confirmReboot() {
-    if (confirm("Sei sicuro di voler riavviare il dispositivo?")) {
+    if (confirm(tr('confirm_reboot_msg', "Sei sicuro di voler riavviare il dispositivo?"))) {
         fetch('/api/system/reboot', { method: 'POST' });
-        showModal("Riavvio", "Il sistema si sta riavviando...");
+        showModal(tr('btn_reboot', "Riavvio"), tr('connecting_title', "Il sistema si sta riavviando..."));
     }
 }
 
 function confirmPoweroff() {
-    if (confirm("Sei sicuro di voler spegnere il dispositivo?")) {
+    if (confirm(tr('confirm_poweroff_msg', "Sei sicuro di voler spegnere il dispositivo?"))) {
         fetch('/api/system/poweroff', { method: 'POST' });
-        showModal("Spegnimento", "Il sistema si sta arrestando...");
+        showModal(tr('btn_poweroff', "Spegnimento"), tr('connecting_title', "Il sistema si sta arrestando..."));
     }
 }
 </script>

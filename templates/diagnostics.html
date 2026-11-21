@@ -4,95 +4,95 @@
 <div class="screen-center">
     <div class="card card-wide">
         <div class="card-header-bar">
-            <h2>Diagnostica di Sistema</h2>
+            <h2>{{ t('diag_title') }}</h2>
             <div style="display:flex; gap:10px;">
-                <button class="btn btn-secondary" onclick="testOverlay()">▶ Testa Overlay OSD</button>
-                <button class="btn btn-secondary" onclick="sessionStorage.removeItem('hidathin_boot_id'); window.location.href='/';">▶ Simula Splash Boot</button>
-                <button class="btn btn-secondary" onclick="window.location.reload()">↻ Aggiorna Dati</button>
+                <button class="btn btn-secondary" onclick="testOverlay()">{{ t('diag_btn_overlay') }}</button>
+                <button class="btn btn-secondary" onclick="sessionStorage.removeItem('hidathin_boot_id'); window.location.href='/';">{{ t('diag_btn_splash') }}</button>
+                <button class="btn btn-secondary" onclick="window.location.reload()">{{ t('diag_btn_refresh') }}</button>
             </div>
         </div>
 
         <div class="diag-grid">
             <div class="diag-section">
-                <h3>Rete Locale (LAN / Wi-Fi)</h3>
+                <h3>{{ t('diag_sec_lan') }}</h3>
                 <table class="diag-table">
-                    <tr><td>Interfaccia primaria:</td><td><strong>{{ network.wifi.interface if network.wifi.connected else network.ethernet.interface }}</strong></td></tr>
-                    <tr><td>SSID Wi-Fi:</td><td><strong>{{ network.wifi.ssid or 'Disconnesso' }}</strong></td></tr>
-                    <tr><td>Potenza Segnale:</td><td><strong>{{ network.wifi.signal }}%</strong></td></tr>
-                    <tr><td>IP LAN:</td><td><strong>{{ network.primary_ip or '--' }}</strong></td></tr>
-                    <tr><td>Gateway Predefinito:</td><td><strong>{{ network.default_gateway or '--' }}</strong></td></tr>
+                    <tr><td>{{ t('diag_primary_iface') }}</td><td><strong>{{ network.wifi.interface if network.wifi.connected else network.ethernet.interface }}</strong></td></tr>
+                    <tr><td>{{ t('diag_wifi_ssid') }}</td><td><strong>{{ network.wifi.ssid or t('badge_disconnected') }}</strong></td></tr>
+                    <tr><td>{{ t('diag_signal') }}</td><td><strong>{{ network.wifi.signal }}%</strong></td></tr>
+                    <tr><td>{{ t('diag_lan_ip') }}</td><td><strong>{{ network.primary_ip or '--' }}</strong></td></tr>
+                    <tr><td>{{ t('diag_gw') }}</td><td><strong>{{ network.default_gateway or '--' }}</strong></td></tr>
                 </table>
             </div>
 
             <div class="diag-section">
-                <h3>Tailscale</h3>
+                <h3>{{ t('diag_sec_ts') }}</h3>
                 <table class="diag-table">
-                    <tr><td>Stato Tailscale:</td><td><strong>{{ 'CONNESSO' if tailscale.connected else 'NON CONNESSO' }}</strong></td></tr>
-                    <tr><td>IP Tailscale IPv4:</td><td><strong>{{ tailscale.ip or '--' }}</strong></td></tr>
-                    <tr><td>MagicDNS Suffix:</td><td><strong>{{ tailscale.magic_dns_suffix or '--' }}</strong></td></tr>
-                    <tr><td>Nodi attivi nella rete:</td><td><strong>{{ tailscale.peers|length }} computer rilevati</strong></td></tr>
+                    <tr><td>{{ t('diag_ts_status') }}</td><td><strong>{{ t('status_connected_caps') if tailscale.connected else t('status_disconnected_caps') }}</strong></td></tr>
+                    <tr><td>{{ t('diag_ts_ip') }}</td><td><strong>{{ tailscale.ip or '--' }}</strong></td></tr>
+                    <tr><td>{{ t('diag_ts_magicdns') }}</td><td><strong>{{ tailscale.magic_dns_suffix or '--' }}</strong></td></tr>
+                    <tr><td>{{ t('diag_ts_nodes') }}</td><td><strong>{{ t('diag_ts_nodes_count', count=tailscale.peers|length) }}</strong></td></tr>
                 </table>
                 <div style="margin-top: 10px;">
-                    <button class="btn btn-small btn-secondary" onclick="restartTailscaleService()">Riavvia Servizio Tailscale</button>
+                    <button class="btn btn-small btn-secondary" onclick="restartTailscaleService()">{{ t('diag_ts_restart') }}</button>
                 </div>
             </div>
 
             <div class="diag-section">
-                <h3>Hardware Raspberry Pi 3</h3>
+                <h3>{{ t('diag_sec_hw') }}</h3>
                 <table class="diag-table">
-                    <tr><td>RAM Totale:</td><td><strong>{{ metrics.ram_total }} MB</strong></td></tr>
-                    <tr><td>RAM Utilizzata:</td><td><strong>{{ metrics.ram_used }} MB ({{ metrics.ram_percent }}%)</strong></td></tr>
-                    <tr><td>RAM Libera / Disponibile:</td><td><strong>{{ metrics.ram_free }} MB</strong></td></tr>
-                    <tr><td>Swap Utilizzato:</td><td><strong>{{ metrics.swap_used }} / {{ metrics.swap_total }} MB</strong></td></tr>
-                    <tr><td>Temperatura CPU:</td><td><strong>{{ metrics.temp }}</strong></td></tr>
-                    <tr><td>Stato Throttling:</td><td><strong>{{ metrics.throttled.description }} ({{ metrics.throttled.raw }})</strong></td></tr>
-                    <tr><td>Risoluzione Monitor:</td><td><strong>{{ metrics.resolution }}</strong></td></tr>
-                    <tr><td>Compensazione Overscan:</td><td><strong>
-                        {% if metrics.overscan == 'none' %}Disattivata (1:1)
-                        {% elif metrics.overscan == 'light' %}Leggera (~2.5%)
-                        {% elif metrics.overscan == 'medium' %}Marcata (~5%)
-                        {% elif metrics.overscan == 'heavy' %}Massima (~7.5%)
-                        {% else %}Automatica (Rilevamento TV)
+                    <tr><td>{{ t('diag_ram_total') }}</td><td><strong>{{ metrics.ram_total }} MB</strong></td></tr>
+                    <tr><td>{{ t('diag_ram_used') }}</td><td><strong>{{ metrics.ram_used }} MB ({{ metrics.ram_percent }}%)</strong></td></tr>
+                    <tr><td>{{ t('diag_ram_free') }}</td><td><strong>{{ metrics.ram_free }} MB</strong></td></tr>
+                    <tr><td>{{ t('diag_swap') }}</td><td><strong>{{ metrics.swap_used }} / {{ metrics.swap_total }} MB</strong></td></tr>
+                    <tr><td>{{ t('diag_cpu_temp') }}</td><td><strong>{{ metrics.temp }}</strong></td></tr>
+                    <tr><td>{{ t('diag_throttling') }}</td><td><strong>{{ metrics.throttled.description }} ({{ metrics.throttled.raw }})</strong></td></tr>
+                    <tr><td>{{ t('diag_resolution') }}</td><td><strong>{{ metrics.resolution }}</strong></td></tr>
+                    <tr><td>{{ t('diag_overscan') }}</td><td><strong>
+                        {% if metrics.overscan == 'none' %}{{ t('overscan_none') }}
+                        {% elif metrics.overscan == 'light' %}{{ t('overscan_light') }}
+                        {% elif metrics.overscan == 'medium' %}{{ t('overscan_medium') }}
+                        {% elif metrics.overscan == 'heavy' %}{{ t('overscan_heavy') }}
+                        {% else %}{{ t('overscan_auto') }}
                         {% endif %}
                     </strong></td></tr>
-                    <tr><td>Filesystem Root (/):</td><td><strong style="color: {% if fs.root_ro %}#4ade80{% else %}#f59e0b{% endif %};">{{ 'SOLA LETTURA (Protetto)' if fs.root_ro else 'SCRITTURA (RW)' }}</strong></td></tr>
-                    <tr><td>Partizione Dati (/data):</td><td><strong style="color: {% if fs.data_mounted %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ 'MONTATA (RW)' if fs.data_mounted else 'Non montata (Singola partizione)' }}</strong></td></tr>
+                    <tr><td>{{ t('diag_fs_root') }}</td><td><strong style="color: {% if fs.root_ro %}#4ade80{% else %}#f59e0b{% endif %};">{{ t('diag_fs_ro') if fs.root_ro else t('diag_fs_rw') }}</strong></td></tr>
+                    <tr><td>{{ t('diag_fs_data') }}</td><td><strong style="color: {% if fs.data_mounted %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ t('diag_fs_data_mounted') if fs.data_mounted else t('diag_fs_data_unmounted') }}</strong></td></tr>
                 </table>
             </div>
 
             <div class="diag-section">
-                <h3>Verifica Connettività PC Remoto</h3>
+                <h3>{{ t('diag_sec_remote_test') }}</h3>
                 <div style="display:flex; gap:10px; margin-bottom: 10px;">
                     <select id="diag-host-selector" class="input-text" style="flex:1;">
                         {% for key, host in hosts.items() %}
                         <option value="{{ host.hostname }}">{{ host.name }} ({{ host.hostname }})</option>
                         {% endfor %}
                     </select>
-                    <button class="btn btn-primary" onclick="runHostDiagnostics()">Esegui Test</button>
+                    <button class="btn btn-primary" onclick="runHostDiagnostics()">{{ t('diag_btn_run_test') }}</button>
                 </div>
                 <div id="diag-host-result" class="diag-host-box">
-                    Seleziona un host e premi "Esegui Test" per verificare Ping MagicDNS e porta TCP 3389.
+                    {{ t('diag_test_prompt') }}
                 </div>
             </div>
 
             <div class="diag-section">
-                <h3>Supervisione Remota (VNC)</h3>
+                <h3>{{ t('diag_sec_vnc') }}</h3>
                 <table class="diag-table">
-                    <tr><td>Stato Servizio:</td><td><strong style="color: {% if vnc.active %}#4ade80{% else %}#f87171{% endif %};">{{ 'ATTIVO (In ascolto)' if vnc.active else 'NON ATTIVO' }}</strong></td></tr>
-                    <tr><td>Porta VNC:</td><td><strong>{{ vnc.port }}/TCP</strong></td></tr>
-                    <tr><td>Modalità Ascolto:</td><td><strong>{{ 'Esclusiva VPN Tailscale' if vnc.bind_tailscale_only else 'Tutte le interfacce (0.0.0.0)' }}</strong></td></tr>
-                    <tr><td>Endpoint VNC:</td><td style="font-family: monospace;"><strong>{{ vnc.connect_host }}</strong></td></tr>
-                    <tr><td>IP Connessione:</td><td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_ip or '--' }}</strong></td></tr>
-                    <tr><td>Client Connessi:</td><td><strong style="color: {% if vnc.clients_count > 0 %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ vnc.clients_count }} attivi {% if vnc.clients %}({{ vnc.clients|join(', ') }}){% endif %}</strong></td></tr>
+                    <tr><td>{{ t('diag_vnc_status') }}</td><td><strong style="color: {% if vnc.active %}#4ade80{% else %}#f87171{% endif %};">{{ t('diag_vnc_active') if vnc.active else t('diag_vnc_inactive') }}</strong></td></tr>
+                    <tr><td>{{ t('diag_vnc_port') }}</td><td><strong>{{ vnc.port }}/TCP</strong></td></tr>
+                    <tr><td>{{ t('diag_vnc_mode') }}</td><td><strong>{{ t('diag_vnc_mode_ts') if vnc.bind_tailscale_only else t('diag_vnc_mode_all') }}</strong></td></tr>
+                    <tr><td>{{ t('diag_vnc_endpoint') }}</td><td style="font-family: monospace;"><strong>{{ vnc.connect_host }}</strong></td></tr>
+                    <tr><td>{{ t('diag_vnc_ip') }}</td><td style="font-family: monospace; color: #4ade80;"><strong>{{ vnc.connect_ip or '--' }}</strong></td></tr>
+                    <tr><td>{{ t('diag_vnc_clients') }}</td><td><strong style="color: {% if vnc.clients_count > 0 %}#4ade80{% else %}var(--text-secondary){% endif %};">{{ t('vnc_clients_active', count=vnc.clients_count) }} {% if vnc.clients %}({{ vnc.clients|join(', ') }}){% endif %}</strong></td></tr>
                 </table>
                 <div style="margin-top: 10px;">
-                    <button class="btn btn-small btn-secondary" onclick="restartVncService()">Riavvia Servizio VNC</button>
+                    <button class="btn btn-small btn-secondary" onclick="restartVncService()">{{ t('diag_vnc_restart') }}</button>
                 </div>
             </div>
         </div>
 
         <div style="margin-top: 25px; display: flex; justify-content: space-between;">
-            <a href="/" class="btn btn-secondary">◄ Torna al Menu Principale</a>
+            <a href="/" class="btn btn-secondary">{{ t('btn_back_main') }}</a>
         </div>
     </div>
 </div>

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to `0.2.x` versioning.
 
+## [0.2.32] - 2026-11-21
+
+### Added
+- **Bilingual Internationalization (i18n) & Language Selector (`app/i18n.py`, `app/launcher.py`, `templates/settings.html`, `templates/index.html`, `templates/hosts.html`, `templates/wifi.html`, `templates/diagnostics.html`, `app/main.py`, `app/system.py`, `config/settings.yaml`, `install.sh`)**:
+  - Added full bilingual support with Italian (`it`, default) and English (`en`) across both the Web UI and the Native Tkinter Launcher.
+  - Implemented centralized internationalization module `app/i18n.py` providing symmetric translation dictionaries, string interpolation helper `t()`, and current language detection.
+  - Added Language selection dropdown in Settings (`setting-language`) in both the Web Admin interface and the Native Tkinter Settings dialog.
+  - Fully translated all user-facing labels on the initial screen (dashboard/home, boot splash, cyberpunk status cards, Windows credentials box, connection overlay) and secondary pages (Manage PCs, Wi-Fi configuration, System diagnostics, Settings & OS updater).
+  - Added instant dynamic UI updates on language switch in the Native Launcher (`update_ui_language`) without requiring application restart.
+  - Integrated `language` parameter into `config/settings.yaml` and schema validation in `app/system.py` (`VALID_LANGUAGES = {"it", "en"}`).
+  - Updated installation script `install.sh` to include default `language: "it"` setting.
+  - Added automated test suite `tests/test_i18n.py` verifying key symmetry, formatting, schema validation, context processor injection, and live GUI language switching.
+
 ## [0.2.31] - 2026-11-21
 
 ### Added
